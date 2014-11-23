@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -106,7 +106,7 @@ namespace DotNetNuke.UI.UserControls
                         DesktopModuleInfo objDesktopModule = DesktopModuleController.GetDesktopModule(objModuleDefinition.DesktopModuleID, PortalId);
                         if (objDesktopModule != null)
                         {
-                            PackageInfo objPackage = PackageController.GetPackage(objDesktopModule.PackageID);
+                            PackageInfo objPackage = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.PackageID == objDesktopModule.PackageID);
                             if (objPackage != null)
                             {
                                 strInfo = strInfo.Replace("[ORGANIZATION]", objPackage.Organization);

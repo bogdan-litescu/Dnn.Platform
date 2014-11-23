@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -86,7 +86,7 @@ namespace DotNetNuke.UI.WebControls
 
                 if (definition != null && definition.ReadOnly && (editor.Editor.EditMode == PropertyEditorMode.Edit))
                 {
-                    PortalSettings ps = PortalController.GetCurrentPortalSettings();
+                    PortalSettings ps = PortalController.Instance.GetCurrentPortalSettings();
                     if (!PortalSecurity.IsInRole(ps.AdministratorRoleName))
                     {
                         editor.Editor.EditMode = PropertyEditorMode.View;
@@ -96,23 +96,14 @@ namespace DotNetNuke.UI.WebControls
                 //We need to wire up the RegionControl to the CountryControl
                 if (editor.Editor is DNNRegionEditControl)
                 {
-                    ListEntryInfo country = null;
+                    string country = null;
 
                     foreach (FieldEditorControl checkEditor in Fields)
                     {
                         if (checkEditor.Editor is DNNCountryEditControl)
                         {
                             var countryEdit = (DNNCountryEditControl) checkEditor.Editor;
-                            var objListController = new ListController();
-                            var countries = objListController.GetListEntryInfoItems("Country");
-                            foreach (ListEntryInfo checkCountry in countries)
-                            {
-                                if (checkCountry.Text == Convert.ToString(countryEdit.Value))
-                                {
-                                    country = checkCountry;
-                                    break;
-                                }
-                            }
+                            country = Convert.ToString(countryEdit.Value);
                         }
                     }
 					
@@ -120,14 +111,14 @@ namespace DotNetNuke.UI.WebControls
                     string countryKey;
                     if (country != null)
                     {
-                        countryKey = "Country." + country.Value;
+                        countryKey = "Country." + country;
                     }
                     else
                     {
                         countryKey = "Country.Unknown";
                     }
                     var attributes = new object[1];
-                    attributes[0] = new ListAttribute("Region", countryKey, ListBoundField.Text, ListBoundField.Text);
+                    attributes[0] = new ListAttribute("Region", countryKey, ListBoundField.Value, ListBoundField.Text);
                     editor.Editor.CustomAttributes = attributes;
                 }
             }

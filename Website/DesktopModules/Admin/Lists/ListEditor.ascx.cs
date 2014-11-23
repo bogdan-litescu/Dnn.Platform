@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -18,6 +18,9 @@
 // CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
 // DEALINGS IN THE SOFTWARE.
 #endregion
+
+
+
 #region Usings
 
 using System;
@@ -33,7 +36,9 @@ using Telerik.Web.UI;
 
 #endregion
 
+// ReSharper disable CheckNamespace
 namespace DotNetNuke.Common.Lists
+// ReSharper restore CheckNamespace
 {
     /// -----------------------------------------------------------------------------
     /// <summary>
@@ -41,15 +46,11 @@ namespace DotNetNuke.Common.Lists
     /// </summary>
     /// <remarks>
     /// </remarks>
-    /// <history>
-    /// 	[tamttt] 20/10/2004	Created
-    /// </history>
     /// -----------------------------------------------------------------------------
-
     public partial class ListEditor : PortalModuleBase
     {
 
-        #region "Protected Properties"
+        #region Protected Properties
         
         protected string Mode
         {
@@ -65,33 +66,16 @@ namespace DotNetNuke.Common.Lists
 
         #endregion
 
-        #region "Private Methods"
+        #region Private Methods
 
         private void BindList(string key)
         {
             lstEntries.SelectedKey = key;
-            if (PortalSettings.ActiveTab.IsSuperTab)
-            {
-                lstEntries.ListPortalID = Null.NullInteger;
-            }
-            else
-            {
-                lstEntries.ListPortalID = PortalId;
-            }
+            lstEntries.ListPortalID = PortalSettings.ActiveTab.IsSuperTab ? Null.NullInteger : PortalId;
             lstEntries.ShowDelete = true;
             lstEntries.DataBind();
         }
 
-        /// -----------------------------------------------------------------------------
-        /// <summary>
-        ///     Loads top level entry list into DNNTree
-        /// </summary>        
-        /// <remarks>
-        /// </remarks>
-        /// <history>
-        ///     [tamttt] 20/10/2004	Created
-        /// </history>
-        /// -----------------------------------------------------------------------------
         private void BindTree()
         {
             var ctlLists = new ListController();
@@ -102,10 +86,21 @@ namespace DotNetNuke.Common.Lists
 
             foreach (ListInfo list in colLists)
             {
-				var node = new DnnTreeNode { Text = list.DisplayName };
+                String filteredNode;
+                if (list.DisplayName.Contains(":"))
+                {
+                    var finalPeriod = list.DisplayName.LastIndexOf(".", StringComparison.InvariantCulture);
+                    filteredNode = list.DisplayName.Substring(finalPeriod + 1);
+
+                }
+                else
+                {
+                    filteredNode = list.DisplayName;
+                }
+				var node = new DnnTreeNode { Text = filteredNode };
                 {
                     node.Value = list.Key;
-                    node.ToolTip = list.EntryCount + " entries";
+                    node.ToolTip = String.Format(LocalizeString("NoEntries"), list.EntryCount);
 					node.ImageUrl = IconController.IconURL("Folder");
                 }
                 if (list.Level == 0)
@@ -116,7 +111,9 @@ namespace DotNetNuke.Common.Lists
                 {
                     if (indexLookup[list.ParentList] != null)
                     {
+                        
                         var parentNode = (DnnTreeNode) indexLookup[list.ParentList];
+  
                         parentNode.Nodes.Add(node);
                     }
                 }
@@ -129,41 +126,14 @@ namespace DotNetNuke.Common.Lists
             }
         }
 
-        /// -----------------------------------------------------------------------------
-        /// <summary>
-        ///     Loads top level entry list
-        /// </summary>
-        /// <param name="ParentKey"></param>
-        /// <remarks>
-        /// </remarks>
-        /// <history>
-        ///     [tamttt] 20/10/2004	Created
-        /// </history>
-        /// -----------------------------------------------------------------------------
-        private DnnTreeNode GetParentNode(string ParentKey)
-        {
-	        var allNodes = listTree.GetAllNodes();
-			for (var i = 0; i < allNodes.Count; i++)
-            {
-				if (allNodes[i].Value == ParentKey)
-                {
-					return allNodes[i] as DnnTreeNode;
-                }
-            }
-            return null;
-        }
+        #endregion
 
-#endregion
-
-#region "Event Handlers"
+        #region Event Handlers
 
         /// -----------------------------------------------------------------------------
         /// <summary>
         /// Page_Init runs when the control is initialised
         /// </summary>
-        /// <history>
-        /// 	[cnurse]	02/05/2007  Created
-        /// </history>
         /// -----------------------------------------------------------------------------
         protected override void OnInit(EventArgs e)
         {
@@ -184,9 +154,6 @@ namespace DotNetNuke.Common.Lists
         /// <param name="e"></param>
         /// <remarks>
         /// </remarks>
-        /// <history>
-        ///     [tamttt] 20/10/2004	Created
-        /// </history>
         /// -----------------------------------------------------------------------------
         protected override void OnLoad(EventArgs e)
         {
@@ -226,9 +193,6 @@ namespace DotNetNuke.Common.Lists
         /// <param name="e"></param>
         /// <remarks>
         /// </remarks>
-        /// <history>
-        ///     [cnurse] 01/29/2007	Created
-        /// </history>
         /// -----------------------------------------------------------------------------
         protected override void OnPreRender(EventArgs e)
         {
@@ -247,9 +211,6 @@ namespace DotNetNuke.Common.Lists
         /// <param name="e"></param>
         /// <remarks>
         /// </remarks>
-        /// <history>
-        ///     [tamttt] 20/10/2004	Created
-        /// </history>
         /// -----------------------------------------------------------------------------
         private void DNNTree_NodeClick(object source, RadTreeNodeEventArgs e)
         {
@@ -266,9 +227,6 @@ namespace DotNetNuke.Common.Lists
         /// <remarks>
         ///     Using "CommandName" property of cmdSaveEntry to determine this is a new list
         /// </remarks>
-        /// <history>
-        ///     [tamttt] 20/10/2004	Created
-        /// </history>
         /// -----------------------------------------------------------------------------
         private void cmdAddList_Click(object sender, EventArgs e)
         {

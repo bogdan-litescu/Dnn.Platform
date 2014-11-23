@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -40,6 +40,8 @@ using DotNetNuke.UI.Skins;
 
 namespace DotNetNuke.Entities.Host
 {
+    using DotNetNuke.Entities.Portals;
+
     using Web.Client;
 
     /// <summary>
@@ -87,6 +89,18 @@ namespace DotNetNuke.Entities.Host
             }
         }
 
+        /// <summary>
+        /// gets whether or not CDN has been enabled for all registered javascript libraries
+        /// </summary>
+        public static bool CdnEnabled
+        {
+            get
+            {
+                return HostController.Instance.GetBoolean("CDNEnabled", false);
+            }
+        }
+
+
         /// -----------------------------------------------------------------------------
         /// <summary>
         ///   Gets whether the Upgrade Indicator is enabled
@@ -121,12 +135,20 @@ namespace DotNetNuke.Entities.Host
         {
             get
             {
-                string setting = HostController.Instance.GetString("ControlPanel");
-                if (string.IsNullOrEmpty(setting))
-                {
-                    setting = Globals.glbDefaultControlPanel;
-                }
-                return setting;
+                return HostController.Instance.GetString("ControlPanel", Globals.glbDefaultControlPanel);
+            }
+        }
+
+        /// <summary>
+        /// setting to control where the control panel is loaded by the core and allowed to control it's own visibility.
+        /// this is useful when the control panel needs to be visible for all users regardless of edit page/module permissions.
+        /// it's also for backwards compatibility, prior to 7.2 the control panel was always loaded. 
+        /// </summary>
+        public static bool AllowControlPanelToDetermineVisibility
+        {
+            get
+            {
+                return HostController.Instance.GetBoolean("AllowControlPanelToDetermineVisibility", Globals.glbAllowControlPanelToDetermineVisibility);
             }
         }
 
@@ -434,6 +456,24 @@ namespace DotNetNuke.Entities.Host
 
         /// -----------------------------------------------------------------------------
         /// <summary>
+        ///   Gets whether the installation runs in debug mode. This property can be used
+        ///   by the framework and extensions alike to write more verbose logs/onscreen
+        ///   information, etc. It is set in the host settings page.
+        /// </summary>
+        /// <history>
+        ///   [pdonker]  10/02/2013   Created
+        /// </history>
+        /// -----------------------------------------------------------------------------
+        public static bool DebugMode
+        {
+            get
+            {
+                return HostController.Instance.GetBoolean("DebugMode", false);
+            }
+        }
+
+        /// -----------------------------------------------------------------------------
+        /// <summary>
         ///   Gets whether a css class based on the Module Name is automatically rendered
         /// </summary>
         /// <remarks>
@@ -451,6 +491,28 @@ namespace DotNetNuke.Entities.Host
             }
         }
 
+        /// <summary>
+        /// Whether force upgrade wizard open in ssl channel.
+        /// </summary>
+        public static bool UpgradeForceSsl
+        {
+            get
+            {
+                return HostController.Instance.GetBoolean("UpgradeForceSSL", false);
+            }
+        }
+
+        /// <summary>
+        /// The domain used when upgrade wizard forced to shown in ssl channel.
+        /// </summary>
+        public static string SslDomain
+        {
+            get
+            {
+                return HostController.Instance.GetString("SSLDomain");
+            }
+        }
+
         /// -----------------------------------------------------------------------------
         /// <summary>
         ///   Gets whether File AutoSync is Enabled
@@ -458,15 +520,28 @@ namespace DotNetNuke.Entities.Host
         /// <remarks>
         ///   Defaults to False
         /// </remarks>
-        /// <history>
-        ///   [cnurse]	01/28/2008   Created
-        /// </history>
         /// -----------------------------------------------------------------------------
         public static bool EnableFileAutoSync
         {
             get
             {
                 return HostController.Instance.GetBoolean("EnableFileAutoSync", false);
+            }
+        }
+
+        /// -----------------------------------------------------------------------------
+        /// <summary>
+        ///   Gets whether The Getting Started Page is Enabled
+        /// </summary>
+        /// <remarks>
+        ///   Defaults to True
+        /// </remarks>
+        /// -----------------------------------------------------------------------------
+        public static bool EnableGettingStartedPage
+        {
+            get
+            {
+                return HostController.Instance.GetBoolean("EnableGettingStartedPage", true);
             }
         }
 
@@ -594,10 +669,14 @@ namespace DotNetNuke.Entities.Host
         {
             get
             {
+                if (SMTPPortalEnabled)
+                {
+                    return PortalController.GetPortalSettingAsBoolean("SMTPEnableSSL", PortalSettings.Current.PortalId, false);
+                }
                 return HostController.Instance.GetBoolean("SMTPEnableSSL", false);
             }
         }
-
+        
         /// -----------------------------------------------------------------------------
         /// <summary>
         ///   Gets whether the Event Log Buffer is Enabled
@@ -627,7 +706,7 @@ namespace DotNetNuke.Entities.Host
                 return new FileExtensionWhitelist(HostController.Instance.GetString("FileExtensions"));
             }
         }
-
+        
         /// -----------------------------------------------------------------------------
         /// <summary>
         ///   Gets the GUID
@@ -832,6 +911,17 @@ namespace DotNetNuke.Entities.Host
             get
             {
                 return HostController.Instance.GetInteger("MembershipResetLinkValidity", 60);
+            }
+        }
+
+        /// <summary>
+        /// set length of time (in minutes) that reset links are valid for - default is 24 hours (1440 min)
+        /// </summary>
+        public static int AdminMembershipResetLinkValidity
+        {
+            get
+            {
+                return HostController.Instance.GetInteger("AdminMembershipResetLinkValidity", 1440);
             }
         }
 
@@ -1150,7 +1240,21 @@ namespace DotNetNuke.Entities.Host
                 return setting;
             }
         }
-
+        /// -----------------------------------------------------------------------------
+        /// <summary>
+        ///   Gets the delayAtAppStart value
+        /// </summary>
+        /// <remarks>
+        ///   Defaults is 1 min(60 sec)
+        /// </remarks>
+        /// -----------------------------------------------------------------------------
+        public static int SchedulerdelayAtAppStart
+        {
+            get
+            {
+                return HostController.Instance.GetInteger("SchedulerdelayAtAppStart", 1);
+            }
+        }
         /// -----------------------------------------------------------------------------
         /// <summary>
         ///   Gets whether to inlcude Common Words in the Search Index
@@ -1246,6 +1350,17 @@ namespace DotNetNuke.Entities.Host
             }
         }
 
+        /// <summary>
+        /// display the text of errors injected via the error querystring parameter
+        /// </summary>
+        public static bool ShowCriticalErrors
+        {
+            get
+            {
+                return HostController.Instance.GetBoolean("ShowCriticalErrors", true);
+            }
+        }
+
         /// -----------------------------------------------------------------------------
         /// <summary>
         ///   Gets the Site Log Buffer size
@@ -1314,29 +1429,97 @@ namespace DotNetNuke.Entities.Host
         /// </summary>
         /// <history>
         ///   [cnurse]	01/28/2008   Created
+        ///   [ohine]	02/01/2009   modifed for portal based smtp
         /// </history>
         /// -----------------------------------------------------------------------------
         public static string SMTPAuthentication
         {
             get
             {
-                return HostController.Instance.GetString("SMTPAuthentication");
+                return GetSmtpSetting("SMTPAuthentication");
             }
+        }
+
+        /// -----------------------------------------------------------------------------
+        /// <summary>
+        /// Gets the SMTP mode (portal|host)
+        /// </summary>
+        /// -----------------------------------------------------------------------------
+        private static bool SMTPPortalEnabled
+        {
+            get
+            {
+                var portalSettings = PortalController.Instance.GetCurrentPortalSettings();
+
+                if (portalSettings == null || portalSettings.ActiveTab == null)
+                {
+                    //without portal settings or active tab, we can't continue
+                    return false;
+                }
+
+                //we don't want to load the portal smtp server when on a host tab. 
+                if (portalSettings.ActiveTab.PortalID == Null.NullInteger)
+                {
+                    return false;
+                }
+
+                var currentSmtpMode = PortalController.GetPortalSetting("SMTPmode", portalSettings.PortalId, Null.NullString);
+
+                return currentSmtpMode.Equals("P", StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        /// -----------------------------------------------------------------------------
+        /// <summary>
+        /// Get's the SMTP setting, if portal smtp is configured, it will return items from the portal settings collection.
+        /// </summary>
+        /// -----------------------------------------------------------------------------
+        private static string GetSmtpSetting(string settingName)
+        {
+            if (SMTPPortalEnabled)
+            {
+                return PortalController.GetPortalSetting(settingName, PortalSettings.Current.PortalId, Null.NullString);
+            }
+
+            return HostController.Instance.GetString(settingName);
         }
 
         /// -----------------------------------------------------------------------------
         /// <summary>
         ///   Gets the SMTP Password
         /// </summary>
-        /// <history>
-        ///   [cnurse]	01/28/2008   Created
-        /// </history>
         /// -----------------------------------------------------------------------------
         public static string SMTPPassword
         {
             get
             {
-                return HostController.Instance.GetString("SMTPPassword");
+                if (SMTPPortalEnabled)
+                {
+                    return PortalController.GetEncryptedString("SMTPPassword", PortalController.Instance.GetCurrentPortalSettings().PortalId, Config.GetDecryptionkey());
+                }
+                else
+                {
+                    string decryptedText;
+                    try
+                    {
+                        decryptedText = HostController.Instance.GetEncryptedString("SMTPPassword", Config.GetDecryptionkey());
+                    }
+                    catch (Exception)
+                    {
+                        //fixes case where smtppassword failed to encrypt due to failing upgrade
+                        var current = HostController.Instance.GetString("SMTPPassword");
+                        if (!string.IsNullOrEmpty(current))
+                        {
+                            HostController.Instance.UpdateEncryptedString("SMTPPassword", current, Config.GetDecryptionkey());
+                            decryptedText = current;
+                        }
+                        else
+                        {
+                            decryptedText = string.Empty;
+                        }
+                    }
+                    return decryptedText;
+                }
             }
         }
 
@@ -1344,15 +1527,12 @@ namespace DotNetNuke.Entities.Host
         /// <summary>
         ///   Gets the SMTP Server
         /// </summary>
-        /// <history>
-        ///   [cnurse]	01/28/2008   Created
-        /// </history>
         /// -----------------------------------------------------------------------------
         public static string SMTPServer
         {
             get
             {
-                return HostController.Instance.GetString("SMTPServer");
+                return GetSmtpSetting("SMTPServer");
             }
         }
 
@@ -1360,18 +1540,53 @@ namespace DotNetNuke.Entities.Host
         /// <summary>
         ///   Gets the SMTP Username
         /// </summary>
-        /// <history>
-        ///   [cnurse]	01/28/2008   Created
-        /// </history>
         /// -----------------------------------------------------------------------------
         public static string SMTPUsername
         {
             get
             {
-                return HostController.Instance.GetString("SMTPUsername");
+                return GetSmtpSetting("SMTPUsername");
             }
         }
 
+        /// -----------------------------------------------------------------------------
+        /// <summary>
+        ///   Gets the SMTP Connection Limit
+        /// </summary>
+        /// <history>
+        ///   [evi]	03/05/2014   Created
+        /// </history>
+        /// -----------------------------------------------------------------------------
+        public static int SMTPConnectionLimit
+        {
+            get
+            {
+                if (SMTPPortalEnabled)
+                {
+                    return PortalController.GetPortalSettingAsInteger("SMTPConnectionLimit", PortalSettings.Current.PortalId, 1);
+                }
+                return HostController.Instance.GetInteger("SMTPConnectionLimit", 1);
+            }
+        }
+        /// -----------------------------------------------------------------------------
+        /// <summary>
+        ///   Gets the SMTP MaxIdleTime
+        /// </summary>
+        /// <history>
+        ///   [evi]	03/05/2014   Created
+        /// </history>
+        /// -----------------------------------------------------------------------------
+        public static int SMTPMaxIdleTime
+        {
+            get
+            {
+                if (SMTPPortalEnabled)
+                {
+                    return PortalController.GetPortalSettingAsInteger("SMTPMaxIdleTime", PortalSettings.Current.PortalId, 0);
+                }
+                return HostController.Instance.GetInteger("SMTPMaxIdleTime", 0);
+            }
+        }
         /// -----------------------------------------------------------------------------
         /// <summary>
         ///   Gets whether Exceptions are rethrown
@@ -1495,6 +1710,7 @@ namespace DotNetNuke.Entities.Host
         /// <history>
         ///   [jbrinkman]    09/30/2008    Created
         /// </history>
+        [Obsolete("This is managed through the JavaScript Library package")]
         public static bool jQueryDebug
         {
             get
@@ -1512,6 +1728,7 @@ namespace DotNetNuke.Entities.Host
         /// <history>
         ///   [jbrinkman]    09/30/2008    Created
         /// </history>
+        [Obsolete("This is managed through the JavaScript Library package")]
         public static bool jQueryHosted
         {
             get
@@ -1527,6 +1744,7 @@ namespace DotNetNuke.Entities.Host
         ///   Defaults to the DefaultHostedUrl constant in the jQuery class.
         ///   The framework will default to the latest released 1.x version hosted on Google.
         /// </remarks>
+        [Obsolete("This is managed through the JavaScript Library package")]
         public static string jQueryUrl
         {
             get
@@ -1549,6 +1767,7 @@ namespace DotNetNuke.Entities.Host
 		///   Defaults to the DefaultHostedUrl constant in the jQuery class.
 		///   The framework will default to the latest released 1.x version hosted on Google.
 		/// </remarks>
+		[Obsolete("This is managed through the JavaScript Library package")]
 		public static string jQueryMigrateUrl
 		{
 			get
@@ -1571,6 +1790,7 @@ namespace DotNetNuke.Entities.Host
         ///   Defaults to the DefaultUIHostedUrl constant in the jQuery class.
         ///   The framework will default to the latest released 1.x version hosted on Google.
         /// </remarks>
+        [Obsolete("This is managed through the JavaScript Library package")]
         public static string jQueryUIUrl
         {
             get
@@ -1652,6 +1872,13 @@ namespace DotNetNuke.Entities.Host
 				return timeout;
 			}
 		}
+        /// <summary>
+        /// Get the IgnoreWhiteList value, used during portal template import.
+        /// </summary>
+        static bool IgnoreWhiteList
+        {
+            get { return HostController.Instance.GetBoolean("IgnoreWhiteList", false); }
+        }
 
         #endregion
 

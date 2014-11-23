@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -31,6 +31,7 @@ using System.Web;
 using System.Xml.XPath;
 
 using DotNetNuke.Data;
+using DotNetNuke.Entities.Controllers;
 using DotNetNuke.Entities.Users;
 using DotNetNuke.Framework;
 using DotNetNuke.Common.Utilities;
@@ -53,10 +54,6 @@ namespace DotNetNuke.Services.Install
     /// </summary>
     /// <remarks>
     /// </remarks>
-    /// <history>
-    /// 	[cnurse]	01/23/2007 Created
-    ///     [vnguyen]   07/09/2012 Modified
-    /// </history>
     /// -----------------------------------------------------------------------------
     public partial class UpgradeWizard : PageBase
     {
@@ -65,18 +62,17 @@ namespace DotNetNuke.Services.Install
         private const string LocalesFile = "/Install/App_LocalResources/Locales.xml";
         protected static readonly string StatusFilename = "upgradestat.log.resources.txt";
         protected static new string LocalResourceFile = "~/Install/App_LocalResources/UpgradeWizard.aspx.resx";
-        private Version _dataBaseVersion;        
         private static string _culture;
         private static string[] _supportedLanguages;
 
         private static IInstallationStep _currentStep;
         private static bool _upgradeRunning;
         private static int _upgradeProgress;
-        private static bool _isAuthenticated = false;
 
         #endregion
 
         #region Protected Members
+
         protected Version ApplicationVersion
         {
             get
@@ -84,16 +80,19 @@ namespace DotNetNuke.Services.Install
                 return DotNetNukeContext.Current.Application.Version;
             }
         }
-        protected Version DatabaseVersion
+
+        protected Version CurrentVersion
         {
             get
             {
-                return _dataBaseVersion ?? (_dataBaseVersion = DataProvider.Instance().GetVersion());
+                return DotNetNukeContext.Current.Application.CurrentVersion;
             }
         }
+
         #endregion
 
         #region Private Properties
+
         private static string StatusFile
         {
             get
@@ -102,25 +101,18 @@ namespace DotNetNuke.Services.Install
             }
         }
 
-        private static bool IsAuthenticated
-        {
-            get
-            {
-                return _isAuthenticated;
-            }
-            set
-            {
-                _isAuthenticated = value;
-            }
-        }
+        private static bool IsAuthenticated { get; set; }
+
         #endregion
 
         #region Private Methods
+
         private void LocalizePage()
         {
             SetBrowserLanguage();
+            Page.Title = LocalizeString("Title");
             versionLabel.Text = string.Format(LocalizeString("Version"), Globals.FormatVersion(ApplicationVersion));
-            currentVersionLabel.Text = string.Format(LocalizeString("CurrentVersion"), Globals.FormatVersion(DatabaseVersion));
+            currentVersionLabel.Text = string.Format(LocalizeString("CurrentVersion"), Globals.FormatVersion(CurrentVersion));
         }
 
         private static void GetInstallerLocales()
@@ -295,9 +287,38 @@ namespace DotNetNuke.Services.Install
             //remove installwizard files added back by upgrade package
             Upgrade.Upgrade.DeleteInstallerFiles();
 
+            //Update Getting Started Settings
+            foreach (UserInfo hostUser in UserController.GetUsers(false, true, -1))
+            {
+                HostController.Instance.Update(String.Format("GettingStarted_Hide_{0}", hostUser.UserID), "false");
+                HostController.Instance.Update(String.Format("GettingStarted_Display_{0}", hostUser.UserID), "true");
+            }
+
             Config.Touch();
             Response.Redirect("../Default.aspx", true);
         }
+
+        private void SslRequiredCheck()
+        {
+            if (Entities.Host.Host.UpgradeForceSsl && !Request.IsSecureConnection)
+            {
+                var sslDomain = Entities.Host.Host.SslDomain;
+                if (string.IsNullOrEmpty(sslDomain))
+                {
+                    sslDomain = Request.Url.Host;
+                }
+                else if (sslDomain.Contains("://"))
+                {
+                    sslDomain = sslDomain.Substring(sslDomain.IndexOf("://") + 3);
+                }
+
+                var sslUrl = string.Format("https://{0}{1}",
+                    sslDomain, Request.RawUrl);
+
+                Response.Redirect(sslUrl, true);
+            }
+        }
+
         #endregion
 
         #region Protected Methods
@@ -327,6 +348,7 @@ namespace DotNetNuke.Services.Install
         protected override void OnInit(EventArgs e)
         {
             base.OnInit(e);
+            SslRequiredCheck();
             GetInstallerLocales();
         }
 
@@ -358,14 +380,25 @@ namespace DotNetNuke.Services.Install
         }
         #endregion
         
-        #region "Web Methods"
+        #region Web Methods
+
         //steps shown in UI
         static IInstallationStep upgradeDatabase = new InstallDatabaseStep();
         static IInstallationStep upgradeExtensions = new InstallExtensionsStep();
 
         //Ordered List of Steps (and weight in percentage) to be executed
         private static IDictionary<IInstallationStep, int> _steps = new Dictionary<IInstallationStep, int>
-                                        { {upgradeDatabase, 50}, {upgradeExtensions, 49}, {new InstallVersionStep(), 1} };
+                                {
+                                    {new AddFcnModeStep(), 1},
+                                    {upgradeDatabase, 50}, 
+                                    {upgradeExtensions, 49}, 
+                                    {new InstallVersionStep(), 1}
+                                };
+
+        static UpgradeWizard()
+        {
+            IsAuthenticated = false;
+        }
 
         [System.Web.Services.WebMethod()]
         public static Tuple<bool, string> ValidateInput(Dictionary<string, string> accountInfo)

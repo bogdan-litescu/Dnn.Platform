@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -49,34 +49,41 @@ namespace DotNetNuke.Services.Search
     [Obsolete("Deprecated in DNN 7.1.  No longer used in the Search infrastructure.")]
     public class SearchDataStoreController
     {
+        [Obsolete("Deprecated in DNN 7.2.2  Implementation changed to return a NullInteger value")]
         public static int AddSearchItem(SearchItemInfo item)
         {
-            return DataProvider.Instance().AddSearchItem(item.Title, item.Description, item.Author, item.PubDate, item.ModuleId, item.SearchKey, item.GUID, item.ImageFileId);
+            return Null.NullInteger;
         }
 
+        [Obsolete("Deprecated in DNN 7.2.2  Implementation changed to do nothing")]
         public static void DeleteSearchItem(int SearchItemId)
-        {
-            DataProvider.Instance().DeleteSearchItem(SearchItemId);
+        {            
         }
 
+        [Obsolete("Deprecated in DNN 7.2.2  Implementation changed to do nothing")]
         public static void DeleteSearchItemWords(int SearchItemId)
-        {
-            DataProvider.Instance().DeleteSearchItemWords(SearchItemId);
+        {            
         }
 
+        [Obsolete("Deprecated in DNN 7.1.2  Implementation changed to return empty result set")]
         public static SearchItemInfo GetSearchItem(int ModuleId, string SearchKey)
         {
-            return (SearchItemInfo) CBO.FillObject(DataProvider.Instance().GetSearchItem(ModuleId, SearchKey), typeof (SearchItemInfo));
+            var empty=new SearchItemInfo();
+            return empty;
         }
 
+        [Obsolete("Deprecated in DNN 7.1.2  Implementation changed to return empty result set")]
         public static Dictionary<string, SearchItemInfo> GetSearchItems(int ModuleId)
         {
-            return CBO.FillDictionary<string, SearchItemInfo>("SearchKey", DataProvider.Instance().GetSearchItems(Null.NullInteger, Null.NullInteger, ModuleId));
+            var empty = new Dictionary<string, SearchItemInfo>();
+            return empty;
         }
 
+        [Obsolete("Deprecated in DNN 7.1.2  Implementation changed to return empty result set")]
         public static ArrayList GetSearchItems(int PortalId, int TabId, int ModuleId)
         {
-            return CBO.FillCollection(DataProvider.Instance().GetSearchItems(PortalId, TabId, ModuleId), typeof (SearchItemInfo));
+            var empty = new ArrayList();
+            return empty;
         }
 
         /// -----------------------------------------------------------------------------
@@ -91,14 +98,18 @@ namespace DotNetNuke.Services.Search
         ///		[cnurse]	11/15/2004	documented
         /// </history>
         /// -----------------------------------------------------------------------------
+        [Obsolete("Deprecated in DNN 7.1.2  Implementation changed to return empty result set")]
         public static SearchResultsInfoCollection GetSearchResults(int PortalID, string Word)
         {
-            return new SearchResultsInfoCollection(CBO.FillCollection(DataProvider.Instance().GetSearchResults(PortalID, Word), typeof (SearchResultsInfo)));
+            var empty = new SearchResultsInfoCollection();
+            return empty;
         }
 
+        [Obsolete("Deprecated in DNN 7.1.2  Implementation changed to return empty result set")]
         public static SearchResultsInfoCollection GetSearchResults(int PortalId, int TabId, int ModuleId)
         {
-            return new SearchResultsInfoCollection(CBO.FillCollection(DataProvider.Instance().GetSearchResults(PortalId, TabId, ModuleId), typeof (SearchResultsInfo)));
+            var empty = new SearchResultsInfoCollection();
+            return empty;
         }
 
         /// -----------------------------------------------------------------------------
@@ -142,18 +153,9 @@ namespace DotNetNuke.Services.Search
             return dicSearchSettings;
         }
 
+        [Obsolete("Deprecated in DNN 7.2.2  Implementation changed to do nothing")]
         public static void UpdateSearchItem(SearchItemInfo item)
-        {
-            DataProvider.Instance().UpdateSearchItem(item.SearchItemId,
-                                                     item.Title,
-                                                     item.Description,
-                                                     item.Author,
-                                                     item.PubDate,
-                                                     item.ModuleId,
-                                                     item.SearchKey,
-                                                     item.GUID,
-                                                     item.HitCount,
-                                                     item.ImageFileId);
+        {            
         }
     }
 }

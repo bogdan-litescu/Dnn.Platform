@@ -1,7 +1,7 @@
 ﻿#region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -258,30 +258,27 @@ namespace DotNetNuke.Modules.Admin.Users
 
                 dnnServicesDetails.Visible = DisplayServices;
 
-                if (!IsPostBack)
+                var urlSettings = new DotNetNuke.Entities.Urls.FriendlyUrlSettings(PortalSettings.PortalId);
+                var showVanityUrl = (Config.GetFriendlyUrlProvider() == "advanced") && !User.IsSuperUser;
+                if (showVanityUrl)
                 {
-                    var urlSettings = new FriendlyUrlSettings(PortalSettings.PortalId);
-                    var showVanityUrl = (Config.GetFriendlyUrlProvider() == "advanced") && !User.IsSuperUser;
-                    if (showVanityUrl)
+                    VanityUrlRow.Visible = true;
+                    if (String.IsNullOrEmpty(User.VanityUrl))
                     {
-                        VanityUrlRow.Visible = true;
-                        if (String.IsNullOrEmpty(User.VanityUrl))
-                        {
-                            //Clean Display Name
-                            bool modified;
-                            var options = UrlRewriterUtils.GetOptionsFromSettings(urlSettings);
-                            var cleanUrl = FriendlyUrlController.CleanNameForUrl(User.DisplayName, options, out modified);
-                            var uniqueUrl = FriendlyUrlController.ValidateUrl(cleanUrl, -1, PortalSettings, out modified).ToLowerInvariant();
+                        //Clean Display Name
+                        bool modified;
+                        var options = UrlRewriterUtils.GetOptionsFromSettings(urlSettings);
+                        var cleanUrl = FriendlyUrlController.CleanNameForUrl(User.DisplayName, options, out modified);
+                        var uniqueUrl = FriendlyUrlController.ValidateUrl(cleanUrl, -1, PortalSettings, out modified).ToLowerInvariant();
 
-                            VanityUrlAlias.Text = String.Format("{0}/{1}/", PortalSettings.PortalAlias.HTTPAlias, urlSettings.VanityUrlPrefix);
-                            VanityUrlTextBox.Text = uniqueUrl;
-                            ShowVanityUrl = true;
-                        }
-                        else
-                        {
-                            VanityUrl.Text = String.Format("{0}/{1}/{2}", PortalSettings.PortalAlias.HTTPAlias, urlSettings.VanityUrlPrefix, User.VanityUrl);
-                            ShowVanityUrl = false;
-                        }
+                        VanityUrlAlias.Text = String.Format("{0}/{1}/", PortalSettings.PortalAlias.HTTPAlias, urlSettings.VanityUrlPrefix);
+                        VanityUrlTextBox.Text = uniqueUrl;
+                        ShowVanityUrl = true;
+                    }
+                    else
+                    {
+                        VanityUrl.Text = String.Format("{0}/{1}/{2}", PortalSettings.PortalAlias.HTTPAlias, urlSettings.VanityUrlPrefix, User.VanityUrl);
+                        ShowVanityUrl = false;
                     }
                 }
             }
@@ -432,6 +429,13 @@ namespace DotNetNuke.Modules.Admin.Users
             ctlServices.ID = "MemberServices";
             ctlServices.ModuleConfiguration = ModuleConfiguration;
             ctlServices.UserId = UserId;
+
+            //Define DisplayName filed Enabled Property:
+            object setting = GetSetting(UserPortalID, "Security_DisplayNameFormat");
+            if ((setting != null) && (!string.IsNullOrEmpty(Convert.ToString(setting))))
+            {
+                displayName.Enabled = false;
+            }
         }
 
         /// -----------------------------------------------------------------------------
@@ -466,6 +470,10 @@ namespace DotNetNuke.Modules.Admin.Users
             {
                 AddModuleMessage("UserDeleteError", ModuleMessage.ModuleMessageType.RedError, true);
             }
+            
+            //DNN-26777 
+            new PortalSecurity().SignOut();
+            Response.Redirect(Globals.NavigateURL(PortalSettings.HomeTabId));
         }
 
         protected void cmdUpdate_Click(object sender, EventArgs e)

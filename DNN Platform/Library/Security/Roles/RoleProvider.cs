@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -50,20 +50,12 @@ namespace DotNetNuke.Security.Roles
 
         public virtual bool CreateRole(RoleInfo role)
         {
-            #pragma warning disable 612,618
-
-            return CreateRole(-1, ref role);
-
-            #pragma warning restore 612,618
+            throw new NotImplementedException();
         }
 
         public virtual void DeleteRole(RoleInfo role)
         {
-            #pragma warning disable 612,618
-
-            DeleteRole(-1, ref role);
-
-            #pragma warning restore 612,618
+			throw new NotImplementedException();
         }
 
         public abstract ArrayList GetRoles(int portalId);
@@ -122,11 +114,7 @@ namespace DotNetNuke.Security.Roles
 
         public virtual IList<UserRoleInfo> GetUserRoles(UserInfo user, bool includePrivate)
         {
-#pragma warning disable 612,618
-            //The virtual implmenetations of GetUserRoles(UserInfo, bool) and GetUserRoles(int, int, bool)
-            //are recursive.  A concrete provider will override one of these methods and break the inifinite recursion
-            return GetUserRoles(user.PortalID, user.UserID, includePrivate).Cast<UserRoleInfo>().ToList();
-#pragma warning restore 612,618
+			throw new NotImplementedException();
         }
 
         #region Obsolete Methods
@@ -159,7 +147,7 @@ namespace DotNetNuke.Security.Roles
         public virtual string[] GetRoleNames(int portalId)
         {
             string[] roles = { };
-            var roleList = TestableRoleController.Instance.GetRoles(portalId, r => r.SecurityMode != SecurityMode.SocialGroup && r.Status == RoleStatus.Approved);
+            var roleList = RoleController.Instance.GetRoles(portalId, r => r.SecurityMode != SecurityMode.SocialGroup && r.Status == RoleStatus.Approved);
             var strRoles = roleList.Aggregate("", (current, role) => current + (role.RoleName + "|"));
             if (strRoles.IndexOf("|", StringComparison.Ordinal) > 0)
             {
@@ -186,15 +174,14 @@ namespace DotNetNuke.Security.Roles
             UserInfo user;
             if(userId != -1)
             {
-                var userController = new UserController();
-                user = userController.GetUser(portalId, userId);
+                user = UserController.Instance.GetUser(portalId, userId);
             }
             else
             {
                 user = new UserInfo() {UserID = -1, PortalID = portalId};
             }
 
-            return new ArrayList(GetUserRoles(user, includePrivate).ToArray());
+            return (user == null) ? new ArrayList() : new ArrayList(GetUserRoles(user, includePrivate).ToArray());
         }
 
         [Obsolete("Deprecated in DotNetNuke 6.2. Replaced by GetUserRoles overload that returns IList")]

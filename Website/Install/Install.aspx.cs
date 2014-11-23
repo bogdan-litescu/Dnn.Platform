@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -18,10 +18,14 @@
 // CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
 // DEALINGS IN THE SOFTWARE.
 #endregion
+
+using DotNetNuke.Services.FileSystem;
+
 #region Usings
 
 using System;
 using System.Data;
+using System.Globalization;
 using System.IO;
 using System.Web;
 using System.Web.UI;
@@ -59,7 +63,8 @@ namespace DotNetNuke.Services.Install
     public partial class Install : Page
     {
         private static readonly ILog Logger = LoggerSource.Instance.GetLogger(typeof(Install));
-        #region "Private Methods"
+        
+        #region Private Methods
 
         private void ExecuteScripts()
         {
@@ -143,7 +148,11 @@ namespace DotNetNuke.Services.Install
                     }
 
                     var installConfig = InstallController.Instance.GetInstallConfig();
-
+                    //Create Folder Mappings config
+                    if (!String.IsNullOrEmpty(installConfig.FolderMappingsSettings))
+                    {
+                        FolderMappingsConfigController.Instance.SaveConfig(installConfig.FolderMappingsSettings);
+                    }
                     Upgrade.Upgrade.InstallDNN(strProviderPath);
                     //remove en-US from portal if installing in a different language
                     if (!installConfig.InstallCulture.Equals("en-us", StringComparison.InvariantCultureIgnoreCase))
@@ -168,11 +177,14 @@ namespace DotNetNuke.Services.Install
 
                     var installVersion = DataProvider.Instance().GetInstallVersion();
                     string strError = Config.UpdateInstallVersion(installVersion);
+
+                    //Adding FCN mode to web.config
+                    strError += Config.AddFCNMode(Config.FcnMode.Single);
                     if (!string.IsNullOrEmpty(strError))
                     {
                         Logger.Error(strError);
                     }
-
+                    
                     Response.Write("<h2>Installation Complete</h2>");
                     Response.Write("<br><br><h2><a href='../Default.aspx'>Click Here To Access Your Site</a></h2><br><br>");
                     Response.Flush();
@@ -201,7 +213,6 @@ namespace DotNetNuke.Services.Install
         private void UpgradeApplication()
         {
             var databaseVersion = DataProvider.Instance().GetVersion();
-            var installVersion = DataProvider.Instance().GetInstallVersion();
 
             //Start Timer
             Upgrade.Upgrade.StartTimer();
@@ -256,15 +267,18 @@ namespace DotNetNuke.Services.Install
                     Upgrade.Upgrade.UpgradeDNN(strProviderPath, databaseVersion);
 
                     //Install optional resources if present
-                    Upgrade.Upgrade.InstallPackages("Module", true);
-                    Upgrade.Upgrade.InstallPackages("Skin", true);
-                    Upgrade.Upgrade.InstallPackages("Container", true);
-                    Upgrade.Upgrade.InstallPackages("Language", true);
-                    Upgrade.Upgrade.InstallPackages("Provider", true);
-                    Upgrade.Upgrade.InstallPackages("AuthSystem", true);
-                    Upgrade.Upgrade.InstallPackages("Package", true);
+                    var packages = Upgrade.Upgrade.GetInstallPackages();
+                    foreach (var package in packages)
+                    {
+                        Upgrade.Upgrade.InstallPackage(package.Key, package.Value.PackageType, true);
+                    }
 
+                    //calling GetInstallVersion after SQL scripts exection to ensure sp GetDatabaseInstallVersion exists
+                    var installVersion = DataProvider.Instance().GetInstallVersion();
                     string strError = Config.UpdateInstallVersion(installVersion);
+
+                    //Adding FCN mode to web.config
+                    strError += Config.AddFCNMode(Config.FcnMode.Single);
                     if (!string.IsNullOrEmpty(strError))
                     {
                         Logger.Error(strError);
@@ -352,13 +366,11 @@ namespace DotNetNuke.Services.Install
             Response.Flush();
 
             //install new resources(s)
-            Upgrade.Upgrade.InstallPackages("Module", true);
-            Upgrade.Upgrade.InstallPackages("Skin", true);
-            Upgrade.Upgrade.InstallPackages("Container", true);
-            Upgrade.Upgrade.InstallPackages("Language", true);
-            Upgrade.Upgrade.InstallPackages("Provider", true);
-            Upgrade.Upgrade.InstallPackages("AuthSystem", true);
-            Upgrade.Upgrade.InstallPackages("Package", true);
+            var packages = Upgrade.Upgrade.GetInstallPackages();
+            foreach (var package in packages)
+            {
+                Upgrade.Upgrade.InstallPackage(package.Key, package.Value.PackageType, true);
+            }
 
             Response.Write("<h2>Installation Complete</h2>");
             Response.Write("<br><br><h2><a href='../Default.aspx'>Click Here To Access Your Site</a></h2><br><br>");
@@ -457,7 +469,7 @@ namespace DotNetNuke.Services.Install
         protected override void OnLoad(EventArgs e)
         {
             base.OnLoad(e);
-
+            string test = Config.AddFCNMode(Config.FcnMode.Single);
             //Get current Script time-out
             int scriptTimeOut = Server.ScriptTimeout;
 

@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -117,10 +117,9 @@ namespace DotNetNuke.Data
                     {
                         var props = new LogProperties { new LogDetailInfo("SQL Script Modified", query) };
 
-                        var elc = new EventLogController();
-                        elc.AddLog(props,
-                                    PortalController.GetCurrentPortalSettings(),
-                                    UserController.GetCurrentUserInfo().UserID,
+                        EventLogController.Instance.AddLog(props,
+                                    PortalController.Instance.GetCurrentPortalSettings(),
+                                    UserController.Instance.GetCurrentUserInfo().UserID,
                                     EventLogController.EventLogType.HOST_ALERT.ToString(),
                                     true);
                     }
@@ -141,8 +140,7 @@ namespace DotNetNuke.Data
                     }
                     catch (SqlException objException)
                     {
-                        Logger.Debug(objException);
-
+                        Logger.Error(objException);
                         exceptions += objException + Environment.NewLine + Environment.NewLine + query + Environment.NewLine + Environment.NewLine;
                     }
                 }
@@ -153,14 +151,29 @@ namespace DotNetNuke.Data
 
         private IDataReader ExecuteSQLInternal(string connectionString, string sql)
         {
+            string errorMessage;
+            return ExecuteSQLInternal(connectionString, sql, out errorMessage);
+        }
+        private IDataReader ExecuteSQLInternal(string connectionString, string sql, out string errorMessage)
+        {
             try
             {
                 sql = DataUtil.ReplaceTokens(sql);
-                return PetaPocoHelper.ExecuteReader(connectionString, CommandType.Text, sql);
+                errorMessage = "";
+                return SqlHelper.ExecuteReader(connectionString, CommandType.Text, sql);
             }
-            catch
+            catch (SqlException sqlException)
             {
                 //error in SQL query
+                Logger.Error(sqlException);
+
+                errorMessage = sqlException.Message + Environment.NewLine + Environment.NewLine + sql + Environment.NewLine + Environment.NewLine;
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                errorMessage = ex + Environment.NewLine + Environment.NewLine + sql + Environment.NewLine + Environment.NewLine;
                 return null;
             }
         }
@@ -222,7 +235,7 @@ namespace DotNetNuke.Data
             }
             catch (SqlException objException)
             {
-                Logger.Debug(objException);
+                Logger.Error(objException);
 
                 Exceptions += objException + Environment.NewLine + Environment.NewLine + SQL + Environment.NewLine + Environment.NewLine;
             }
@@ -272,7 +285,7 @@ namespace DotNetNuke.Data
             }
             catch (SqlException objException)
             {
-                Logger.Debug(objException);
+                Logger.Error(objException);
 
                 Exceptions += objException + Environment.NewLine + Environment.NewLine + SQL + Environment.NewLine + Environment.NewLine;
             }
@@ -344,7 +357,7 @@ namespace DotNetNuke.Data
                 }
                 catch (SqlException objException)
                 {
-                    Logger.Debug(objException);
+                    Logger.Error(objException);
 
                     exceptions += objException + Environment.NewLine + Environment.NewLine + script + Environment.NewLine + Environment.NewLine;
                 }
@@ -360,7 +373,7 @@ namespace DotNetNuke.Data
                 }
                 catch (SqlException objException)
                 {
-                    Logger.Debug(objException);
+                    Logger.Error(objException);
 
                     exceptions += objException + Environment.NewLine + Environment.NewLine + script + Environment.NewLine + Environment.NewLine;
                 }
@@ -380,7 +393,12 @@ namespace DotNetNuke.Data
 
         public override IDataReader ExecuteSQLTemp(string connectionString, string sql)
         {
-            return ExecuteSQLInternal(connectionString, sql);
+            string errorMessage;
+            return ExecuteSQLTemp(connectionString, sql, out errorMessage);
+        }
+        public override IDataReader ExecuteSQLTemp(string connectionString, string sql, out string errorMessage)
+        {
+            return ExecuteSQLInternal(connectionString, sql, out errorMessage);
         }
 
 

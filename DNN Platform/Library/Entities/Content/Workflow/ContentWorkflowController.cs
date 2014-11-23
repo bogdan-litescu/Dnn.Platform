@@ -1,7 +1,7 @@
 ﻿#region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -39,7 +39,7 @@ namespace DotNetNuke.Entities.Content.Workflow
 {
     public class ContentWorkflowController : ComponentBase<IContentWorkflowController, ContentWorkflowController>, IContentWorkflowController
     {
-        private ContentController contentController;
+        private readonly ContentController contentController;
         private const string ContentWorkflowNotificationType = "ContentWorkflowNotification";
 
         private ContentWorkflowController()
@@ -74,8 +74,13 @@ namespace DotNetNuke.Entities.Content.Workflow
             AddWorkflowLog(item, ContentWorkflowLogType.WorkflowStarted, userID);            
             AddWorkflowLog(item, ContentWorkflowLogType.StateInitiated, userID);
         }
-        
+
         public void CompleteState(int itemID, string subject, string body, string comment, int portalID, int userID)
+        {
+            CompleteState(itemID, subject, body, comment, portalID, userID, string.Empty);
+        }
+
+        public void CompleteState(int itemID, string subject, string body, string comment, int portalID, int userID, string source, params string[] parameters)
         {
             var item = contentController.GetContentItem(itemID);
             var workflow = GetWorkflow(item);
@@ -102,7 +107,7 @@ namespace DotNetNuke.Entities.Content.Workflow
                     AddWorkflowLog(item, ContentWorkflowLogType.StateInitiated, userID);                    
                 }
             
-                SendNotification(new PortalSettings(portalID), workflow, item, currentState, subject, body, comment, endStateID, userID);
+                SendNotification(new PortalSettings(portalID), workflow, item, currentState, subject, body, comment, endStateID, userID, source, parameters);
             }
         }
 
@@ -125,7 +130,7 @@ namespace DotNetNuke.Entities.Content.Workflow
                 int previousStateID = GetPreviousWorkflowStateID(workflow, item.StateID);
                 SetWorkflowState(previousStateID, item);
                 AddWorkflowLog(item, ContentWorkflowLogType.StateInitiated, userID);                
-                SendNotification(new PortalSettings(portalID), workflow, item, currentState, subject, body, comment, previousStateID, userID);
+                SendNotification(new PortalSettings(portalID), workflow, item, currentState, subject, body, comment, previousStateID, userID, null, null);
             }
         }
 
@@ -194,6 +199,11 @@ namespace DotNetNuke.Entities.Content.Workflow
         public IEnumerable<ContentWorkflowState> GetWorkflowStates(int workflowID)
         {
             return CBO.FillCollection<ContentWorkflowState>(DataProvider.Instance().GetContentWorkflowStates(workflowID));            
+        }
+
+        public ContentWorkflowSource GetWorkflowSource(int workflowId, string sourceName)
+        {
+            return CBO.FillObject<ContentWorkflowSource>(DataProvider.Instance().GetContentWorkflowSource(workflowId, sourceName));
         }
 
         public void AddWorkflowState(ContentWorkflowState state)
@@ -273,7 +283,7 @@ namespace DotNetNuke.Entities.Content.Workflow
         public bool IsReviewer(int stateID)
         {
             var permissions = GetWorkflowStatePermissionByState(stateID);
-            var user = UserController.GetCurrentUserInfo();
+            var user = UserController.Instance.GetCurrentUserInfo();
             return IsReviewer(user, PortalSettings.Current, permissions);
         }
 
@@ -312,64 +322,96 @@ namespace DotNetNuke.Entities.Content.Workflow
 
         public void CreateDefaultWorkflows(int portalId)
         {
-            var wf = new ContentWorkflow
+            if(GetWorkflows(portalId).Any(w => w.WorkflowName == Localization.GetString("DefaultWorkflowName")))
             {
-                PortalID = portalId,
-                WorkflowName = Localization.GetString("DefaultWorkflowName"),
-                Description = Localization.GetString("DefaultWorkflowDescription"),
-                IsDeleted = false,
-                StartAfterCreating = false, 
-                StartAfterEditing = true,
-                DispositionEnabled = false,
-                States = new List<ContentWorkflowState>
-                    {
-                        new ContentWorkflowState
-                            {
-                                StateName = Localization.GetString("DefaultWorkflowState1.StateName"),
-                                Order = 1,
-                                IsActive = true,
-                                SendEmail = false,
-                                SendMessage = true,
-                                IsDisposalState = false,
-                                OnCompleteMessageSubject = Localization.GetString("DefaultWorkflowState1.OnCompleteMessageSubject"),
-                                OnCompleteMessageBody = Localization.GetString("DefaultWorkflowState1.OnCompleteMessageBody"),
-                                OnDiscardMessageSubject = Localization.GetString("DefaultWorkflowState1.OnDiscardMessageSubject"),
-                                OnDiscardMessageBody = Localization.GetString("DefaultWorkflowState1.OnDiscardMessageBody")
-                            }, 
-                        new ContentWorkflowState
-                            {
-                                StateName = Localization.GetString("DefaultWorkflowState2.StateName"),
-                                Order = 2,
-                                IsActive = true,
-                                SendEmail = false,
-                                SendMessage = true,
-                                IsDisposalState = false,
-                                OnCompleteMessageSubject = Localization.GetString("DefaultWorkflowState2.OnCompleteMessageSubject"),
-                                OnCompleteMessageBody = Localization.GetString("DefaultWorkflowState2.OnCompleteMessageBody"),
-                                OnDiscardMessageSubject = Localization.GetString("DefaultWorkflowState2.OnDiscardMessageSubject"),
-                                OnDiscardMessageBody = Localization.GetString("DefaultWorkflowState2.OnDiscardMessageBody")
-                            }, 
-                        new ContentWorkflowState
-                            {
-                                StateName = Localization.GetString("DefaultWorkflowState3.StateName"),
-                                Order = 3,
-                                IsActive = true,
-                                SendEmail = false,
-                                SendMessage = true,
-                                IsDisposalState = false,
-                                OnCompleteMessageSubject = Localization.GetString("DefaultWorkflowState3.OnCompleteMessageSubject"),
-                                OnCompleteMessageBody = Localization.GetString("DefaultWorkflowState3.OnCompleteMessageBody"),
-                                OnDiscardMessageSubject = Localization.GetString("DefaultWorkflowState3.OnDiscardMessageSubject"),
-                                OnDiscardMessageBody = Localization.GetString("DefaultWorkflowState3.OnDiscardMessageBody")
-                            } 
-                    }
-            };
+                return;
+            }
 
-            AddWorkflow(wf);
-            foreach (var wfs in wf.States)
+            var worflow = new ContentWorkflow
+                              {
+                                  PortalID = portalId,
+                                  WorkflowName = Localization.GetString("DefaultWorkflowName"),
+                                  Description = Localization.GetString("DefaultWorkflowDescription"),
+                                  IsDeleted = false,
+                                  StartAfterCreating = false,
+                                  StartAfterEditing = true,
+                                  DispositionEnabled = false,
+                                  States = new List<ContentWorkflowState>
+                                               {
+                                                   new ContentWorkflowState
+                                                       {
+                                                           StateName =
+                                                               Localization.GetString("DefaultWorkflowState1.StateName"),
+                                                           Order = 1,
+                                                           IsActive = true,
+                                                           SendEmail = false,
+                                                           SendMessage = true,
+                                                           IsDisposalState = false,
+                                                           OnCompleteMessageSubject =
+                                                               Localization.GetString(
+                                                                   "DefaultWorkflowState1.OnCompleteMessageSubject"),
+                                                           OnCompleteMessageBody =
+                                                               Localization.GetString(
+                                                                   "DefaultWorkflowState1.OnCompleteMessageBody"),
+                                                           OnDiscardMessageSubject =
+                                                               Localization.GetString(
+                                                                   "DefaultWorkflowState1.OnDiscardMessageSubject"),
+                                                           OnDiscardMessageBody =
+                                                               Localization.GetString(
+                                                                   "DefaultWorkflowState1.OnDiscardMessageBody")
+                                                       },
+                                                   new ContentWorkflowState
+                                                       {
+                                                           StateName =
+                                                               Localization.GetString("DefaultWorkflowState2.StateName"),
+                                                           Order = 2,
+                                                           IsActive = true,
+                                                           SendEmail = false,
+                                                           SendMessage = true,
+                                                           IsDisposalState = false,
+                                                           OnCompleteMessageSubject =
+                                                               Localization.GetString(
+                                                                   "DefaultWorkflowState2.OnCompleteMessageSubject"),
+                                                           OnCompleteMessageBody =
+                                                               Localization.GetString(
+                                                                   "DefaultWorkflowState2.OnCompleteMessageBody"),
+                                                           OnDiscardMessageSubject =
+                                                               Localization.GetString(
+                                                                   "DefaultWorkflowState2.OnDiscardMessageSubject"),
+                                                           OnDiscardMessageBody =
+                                                               Localization.GetString(
+                                                                   "DefaultWorkflowState2.OnDiscardMessageBody")
+                                                       },
+                                                   new ContentWorkflowState
+                                                       {
+                                                           StateName =
+                                                               Localization.GetString("DefaultWorkflowState3.StateName"),
+                                                           Order = 3,
+                                                           IsActive = true,
+                                                           SendEmail = false,
+                                                           SendMessage = true,
+                                                           IsDisposalState = false,
+                                                           OnCompleteMessageSubject =
+                                                               Localization.GetString(
+                                                                   "DefaultWorkflowState3.OnCompleteMessageSubject"),
+                                                           OnCompleteMessageBody =
+                                                               Localization.GetString(
+                                                                   "DefaultWorkflowState3.OnCompleteMessageBody"),
+                                                           OnDiscardMessageSubject =
+                                                               Localization.GetString(
+                                                                   "DefaultWorkflowState3.OnDiscardMessageSubject"),
+                                                           OnDiscardMessageBody =
+                                                               Localization.GetString(
+                                                                   "DefaultWorkflowState3.OnDiscardMessageBody")
+                                                       }
+                                               }
+                              };
+
+            AddWorkflow(worflow);
+            foreach (var state in worflow.States)
             {
-                wfs.WorkflowID = wf.WorkflowID;
-                AddWorkflowState(wfs);
+                state.WorkflowID = worflow.WorkflowID;
+                AddWorkflowState(state);
             }
         }
 
@@ -378,7 +420,7 @@ namespace DotNetNuke.Entities.Content.Workflow
         {
             var replacedSubject = ReplaceNotificationTokens(subject, null, null, null, settings.PortalId, userID);
             var replacedBody = ReplaceNotificationTokens(body, null, null, null, settings.PortalId, userID);
-            SendNotification(sendEmail, sendMessage, settings, roles, users, replacedSubject, replacedBody, comment, userID);
+            SendNotification(sendEmail, sendMessage, settings, roles, users, replacedSubject, replacedBody, comment, userID, null, null);
         }
 
         public void DiscardWorkflow(int contentItemId, string comment, int portalId, int userId)
@@ -414,7 +456,6 @@ namespace DotNetNuke.Entities.Content.Workflow
 
             return result;
         }
-
         #endregion
 
         #region Private Methods
@@ -426,7 +467,7 @@ namespace DotNetNuke.Entities.Content.Workflow
             AddWorkflowLog(workflow.WorkflowID, item, GetWorkflowActionText(ContentWorkflowLogType.CommentProvided), logComment, userID);
         }
 
-        private void SendNotification(bool sendEmail, bool sendMessage, PortalSettings settings, IEnumerable<RoleInfo> roles, IEnumerable<UserInfo> users, string subject, string body, string comment, int userID)
+        private void SendNotification(bool sendEmail, bool sendMessage, PortalSettings settings, IEnumerable<RoleInfo> roles, IEnumerable<UserInfo> users, string subject, string body, string comment, int userID, string source, string[] parameters)
         {
             if (sendEmail)
             {
@@ -434,11 +475,11 @@ namespace DotNetNuke.Entities.Content.Workflow
             }
             if (sendMessage)
             {
-                SendMessageNotifications(settings, roles, users, subject, body, comment, userID);
+                SendMessageNotifications(settings, roles, users, subject, body, comment, userID, source, parameters);
             }
         }
 
-        private void SendNotification(PortalSettings settings, ContentWorkflow workflow, ContentItem item, ContentWorkflowState state, string subject, string body, string comment, int destinationStateID, int actionUserID)
+        private void SendNotification(PortalSettings settings, ContentWorkflow workflow, ContentItem item, ContentWorkflowState state, string subject, string body, string comment, int destinationStateID, int actionUserID, string source, string[] parameters)
         {
             var permissions = GetWorkflowStatePermissionByState(destinationStateID);
             var users = GetUsersFromPermissions(settings, permissions);
@@ -446,10 +487,10 @@ namespace DotNetNuke.Entities.Content.Workflow
             var replacedSubject = ReplaceNotificationTokens(subject, workflow, item, GetWorkflowStateByID(destinationStateID), settings.PortalId, actionUserID);
             var replacedBody = ReplaceNotificationTokens(body, workflow, item, GetWorkflowStateByID(destinationStateID), settings.PortalId, actionUserID);
             
-            SendNotification(state.SendEmail, state.SendMessage, settings, roles, users, replacedSubject, replacedBody, comment, actionUserID);
+            SendNotification(state.SendEmail, state.SendMessage, settings, roles, users, replacedSubject, replacedBody, comment, actionUserID, source, parameters);
         }
 
-        private void SendMessageNotifications(PortalSettings settings, IEnumerable<RoleInfo> roles, IEnumerable<UserInfo> users, string subject, string body, string comment, int actionUserID)
+        private void SendMessageNotifications(PortalSettings settings, IEnumerable<RoleInfo> roles, IEnumerable<UserInfo> users, string subject, string body, string comment, int actionUserID, string source, string[] parameters)
         {
             //TODO: Confirm the final body and comment format
             var fullbody = GetFullBody(body, comment);
@@ -468,6 +509,16 @@ namespace DotNetNuke.Entities.Content.Workflow
                 SenderUserID = actionUserID
             };
 
+            //append the context
+            if (!string.IsNullOrEmpty(source))
+            {
+                if (parameters != null && parameters.Length > 0)
+                {
+                    source = string.Format("{0};{1}", source, string.Join(";", parameters));
+                }
+                notification.Context = source;
+            }
+
             NotificationsController.Instance.SendNotification(notification, settings.PortalId, roles.ToList(), users.ToList());
         }
 
@@ -478,13 +529,11 @@ namespace DotNetNuke.Entities.Content.Workflow
 
         private void SendEmailNotifications(PortalSettings settings, IEnumerable<RoleInfo> roles, IEnumerable<UserInfo> users, string subject, string body, string comment)
         {
-            //TODO: Confirm the final body and comment format
             var fullbody = GetFullBody(body, comment);
-            var roleController = new RoleController();
             var emailUsers = users.ToList();
             foreach (var role in roles)
             {
-                var roleUsers = roleController.GetUsersByRoleName(settings.PortalId, role.RoleName);
+                var roleUsers = RoleController.Instance.GetUsersByRole(settings.PortalId, role.RoleName);
                 emailUsers.AddRange(from UserInfo user in roleUsers select user);
             }
 
@@ -497,34 +546,58 @@ namespace DotNetNuke.Entities.Content.Workflow
         private IEnumerable<RoleInfo> GetRolesFromPermissions(PortalSettings settings, IEnumerable<ContentWorkflowStatePermission> permissions)
         {
             var roles = new List<RoleInfo>();
-            var roleController = new RoleController();
+            
             foreach (var permission in permissions)
             {
-                if (permission.AllowAccess)
+                if (permission.AllowAccess && permission.RoleID > Null.NullInteger)
                 {
-                    if (permission.RoleID > Null.NullInteger)
-                    {                        
-                        roles.Add(roleController.GetRole(permission.RoleID, settings.PortalId));
-                    }
+                    roles.Add(RoleController.Instance.GetRoleById(settings.PortalId, permission.RoleID));
                 }
+            }
+
+            if(!IsAdministratorRoleAlreadyIncluded(settings, roles))
+            {
+                var adminRole = RoleController.Instance.GetRoleByName(settings.PortalId, settings.AdministratorRoleName);
+                roles.Add(adminRole);
             }
             return roles;
         }
 
+        private static bool IsAdministratorRoleAlreadyIncluded(PortalSettings settings, IEnumerable<RoleInfo> roles)
+        {
+            return roles.Any(r => r.RoleName == settings.AdministratorRoleName);
+        }
+
         private IEnumerable<UserInfo> GetUsersFromPermissions(PortalSettings settings, IEnumerable<ContentWorkflowStatePermission> permissions)
         {
-            var users = new List<UserInfo>();            
+            var users = new List<UserInfo>();
             foreach (var permission in permissions)
             {
-                if (permission.AllowAccess)
-                {                    
-                    if (permission.UserID > Null.NullInteger)
-                    {
-                        users.Add(UserController.GetUserById(settings.PortalId, permission.UserID));
-                    }
-                }                
+                if (permission.AllowAccess && permission.UserID > Null.NullInteger)
+                {
+                    users.Add(UserController.GetUserById(settings.PortalId, permission.UserID));
+                }
             }
+            return IncludeSuperUsers(users);
+        }
+
+        private static IEnumerable<UserInfo> IncludeSuperUsers(ICollection<UserInfo> users)
+        {
+            var superUsers = UserController.GetUsers(false, true, Null.NullInteger);
+            foreach (UserInfo superUser in superUsers)
+            {
+                if(IsSuperUserNotIncluded(users, superUser))
+                {
+                    users.Add(superUser);
+                }
+            }
+
             return users;
+        }
+
+        private static bool IsSuperUserNotIncluded(IEnumerable<UserInfo> users, UserInfo superUser)
+        {
+            return users.All(u => u.UserID != superUser.UserID);
         }
 
         private bool IsReviewer(UserInfo user, PortalSettings settings, IEnumerable<ContentWorkflowStatePermission> permissions)
@@ -541,7 +614,7 @@ namespace DotNetNuke.Entities.Content.Workflow
 
             AddWorkflowLog(workflow.WorkflowID, item, GetWorkflowActionText(logType), comment, userID);
         }
-        
+
         private void AddWorkflowLog(int workflowID, ContentItem item, string action, string comment, int userID)
         {
             DataProvider.Instance().AddContentWorkflowLog(action, comment, userID, workflowID, item.ContentItemId);
@@ -668,19 +741,17 @@ namespace DotNetNuke.Entities.Content.Workflow
 
         private void SetWorkflowState(int stateID, ContentItem item)
         {
-            item.StateID = stateID;            
-            contentController.UpdateContentItem(item);            
+            item.StateID = stateID;
+            contentController.UpdateContentItem(item);
         }
 
         private bool IsWorkflowCompleted(ContentWorkflow workflow, ContentItem item)
-        {            
+        {
             var endStateID = GetLastWorkflowStateID(workflow);
 
             return item.StateID == Null.NullInteger || endStateID == item.StateID;
         }
 
-        #endregion        
-    
-        
+        #endregion
     }
 }

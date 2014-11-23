@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -67,6 +67,12 @@ namespace DotNetNuke.Modules.Admin.Extensions
             }
         }
 
+        protected string ReturnUrl
+        {
+            get { return (string)ViewState["ReturnUrl"]; }
+            set { ViewState["ReturnUrl"] = value; }
+        }
+
         public string Mode
         {
             get
@@ -79,7 +85,7 @@ namespace DotNetNuke.Modules.Admin.Extensions
         {
             get
             {
-                return _package ?? (_package = PackageID == Null.NullInteger ? new PackageInfo() : PackageController.GetPackage(PackageID, true));
+                return _package ?? (_package = PackageID == Null.NullInteger ? new PackageInfo() : PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.PackageID == PackageID, true));
             }
         }
 
@@ -91,7 +97,7 @@ namespace DotNetNuke.Modules.Admin.Extensions
                 {
                     if (Package != null)
                     {
-                        var pkgType = PackageController.GetPackageType(Package.PackageType);
+                        var pkgType = PackageController.Instance.GetExtensionPackageType(t => t.PackageType == Package.PackageType);
                         if ((pkgType != null) && (!string.IsNullOrEmpty(pkgType.EditorControlSrc)))
                         {
                             _control = ControlUtilities.LoadControl<Control>(this, pkgType.EditorControlSrc);
@@ -224,7 +230,7 @@ namespace DotNetNuke.Modules.Admin.Extensions
                 {
                     var pkgIconFile = Util.ParsePackageIconFileName(package);
                     package.IconFile = (pkgIconFile.Trim().Length > 0)? Util.ParsePackageIconFile(package) : null;
-                    PackageController.UpdatePackage(package);
+                    PackageController.Instance.SaveExtensionPackage(package);
                 }
                 if (displayMessage)
                 {
@@ -263,7 +269,7 @@ namespace DotNetNuke.Modules.Admin.Extensions
             cmdUpdate.Click += OnUpdateClick;
             Page.PreRenderComplete += (sender, args) =>
                                           {
-                                              if (HttpContext.Current.Request.Url.ToString().Contains("popUp=true"))
+                                              if (UrlUtils.InPopUp())
                                               {
                                                   var title = string.Format("{0} > {1}", Page.Title, Package.FriendlyName);
                                                   Page.Title = title;
@@ -271,25 +277,17 @@ namespace DotNetNuke.Modules.Admin.Extensions
                                           };
 
             BindData();
-        }
 
-        /// -----------------------------------------------------------------------------
-        /// <summary>
-        /// Package_Updated runs when a Package has been updated by a custom editor.
-        /// </summary>
-        /// <remarks>
-        /// </remarks>
-        /// <history>
-        /// 	[cnurse]	08/15/2007	Created
-        /// </history>
-        /// -----------------------------------------------------------------------------
-        private void Package_Updated(object sender, EventArgs e)
-        {
+            if (!IsPostBack)
+            {
+                ReturnUrl = Request.UrlReferrer != null ? Request.UrlReferrer.ToString() : Globals.NavigateURL();
+            }
+
         }
 
         protected void OnCancelClick(object sender, EventArgs e)
         {
-            Response.Redirect(Globals.NavigateURL());
+            Response.Redirect(ReturnUrl);
         }
 
         protected void OnDeleteClick(object sender, EventArgs e)
@@ -315,7 +313,6 @@ namespace DotNetNuke.Modules.Admin.Extensions
             try
             {
                 UpdatePackage(true);
-                Response.Redirect(Request.RawUrl, true);
             }
             catch (Exception ex)
             {

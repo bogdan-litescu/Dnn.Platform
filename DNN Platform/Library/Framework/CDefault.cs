@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -21,21 +21,19 @@
 #region Usings
 
 using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Web.Caching;
+using System.Web;
 using System.Web.UI;
-using System.Web.UI.HtmlControls;
 
-//using DotNetNuke.UI.Utilities;
-using DotNetNuke.Collections.Internal;
+using DotNetNuke.Common.Internal;
 using DotNetNuke.Common.Utilities;
-using DotNetNuke.Entities.Host;
+using DotNetNuke.Entities.Controllers;
+using DotNetNuke.Entities.Modules;
+using DotNetNuke.Entities.Tabs;
+using DotNetNuke.Framework.JavaScriptLibraries;
+using DotNetNuke.Services.GettingStarted;
 using DotNetNuke.UI.Utilities;
-
-using Globals = DotNetNuke.Common.Globals;
+using DotNetNuke.UI.WebControls;
 
 #endregion
 
@@ -44,13 +42,7 @@ namespace DotNetNuke.Framework
     /// -----------------------------------------------------------------------------
     /// Project	 : DotNetNuke
     /// Class	 : CDefault
-    ///
     /// -----------------------------------------------------------------------------
-    /// <summary>
-    ///
-    /// </summary>
-    /// <remarks>
-    /// </remarks>
     /// <history>
     /// 	[sun1]	1/19/2004	Created
     /// </history>
@@ -69,7 +61,10 @@ namespace DotNetNuke.Framework
         {
             if (Page.Form != null)
             {
-                ServicesFrameworkInternal.Instance.RegisterAjaxScript(Page);
+                if (ServicesFrameworkInternal.Instance.IsAjaxScriptSupportRequired)
+                {
+                    ServicesFrameworkInternal.Instance.RegisterAjaxScript(Page);
+                }
             }
         }
 
@@ -78,21 +73,66 @@ namespace DotNetNuke.Framework
         /// Allows the scroll position on the page to be moved to the top of the passed in control.
         /// </summary>
         /// <param name="objControl">Control to scroll to</param>
-        /// <remarks>
-        /// </remarks>
-        /// <history>
-        /// 	[Jon Henning]	3/30/2005	Created
-        /// </history>
         /// -----------------------------------------------------------------------------
         public void ScrollToControl(Control objControl)
         {
             if (ClientAPI.BrowserSupportsFunctionality(ClientAPI.ClientFunctionality.Positioning))
             {
-                ClientAPI.RegisterClientReference(this, ClientAPI.ClientNamespaceReferences.dnn_dom_positioning);
+                JavaScript.RegisterClientReference(this, ClientAPI.ClientNamespaceReferences.dnn_dom_positioning);
                 ClientAPI.RegisterClientVariable(this, "ScrollToControl", objControl.ClientID, true);
                 DNNClientAPI.SetScrollTop(Page);
             }
         }
+
+        protected void ManageGettingStarted()
+        {
+            // The Getting Started dialog can be also opened from the Control Bar, also do not show getting started in popup.
+            var controller = new GettingStartedController();
+            if (!controller.ShowOnStartup || UrlUtils.InPopUp())
+            {
+                return;
+            }
+            var gettingStarted = DnnGettingStarted.GetCurrent(Page);
+            if (gettingStarted == null)
+            {
+                gettingStarted = new DnnGettingStarted();
+                Page.Form.Controls.Add(gettingStarted);
+            }
+            gettingStarted.ShowOnStartup = true;
+        }
+
+        protected void ManageInstallerFiles()
+        {
+            if (!HostController.Instance.GetBoolean("InstallerFilesRemoved"))
+            {
+                Services.Upgrade.Upgrade.DeleteInstallerFiles();
+                HostController.Instance.Update("InstallerFilesRemoved", "True", true);
+            }
+        }
+
+        protected string AdvancedSettingsPageUrl
+        {
+            get
+            {
+                string result ;
+                var tab = TabController.Instance.GetTabByName("Advanced Settings", PortalSettings.PortalId);
+                var modules = ModuleController.Instance.GetTabModules(tab.TabID).Values;
+
+                if (modules.Count > 0)
+                {
+                    var pmb = new PortalModuleBase();
+                    result = pmb.EditUrl(tab.TabID, "", false, "mid=" + modules.ElementAt(0).ModuleID, "popUp=true", "ReturnUrl=" + Server.UrlEncode(TestableGlobals.Instance.NavigateURL()));
+                }
+                else
+                {
+                    result = TestableGlobals.Instance.NavigateURL(tab.TabID);
+                }
+
+                return result;
+            }
+        }
+
+        #region Obsolete Methods
 
         [Obsolete("Deprecated in DotNetNuke 6.0.  Replaced by RegisterStyleSheet")]
         public void AddStyleSheet(string id, string href, bool isFirst)
@@ -106,5 +146,6 @@ namespace DotNetNuke.Framework
             RegisterStyleSheet(this, href, false);
         }
 
+        #endregion
     }
 }

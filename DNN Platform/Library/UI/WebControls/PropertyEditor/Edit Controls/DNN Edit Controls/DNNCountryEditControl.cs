@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -20,7 +20,10 @@
 #endregion
 #region Usings
 
+using System;
+using System.Linq;
 using System.Web.UI;
+using DotNetNuke.Common.Lists;
 
 #endregion
 
@@ -56,7 +59,33 @@ namespace DotNetNuke.UI.WebControls
             ListName = "Country";
             ParentKey = "";
             TextField = ListBoundField.Text;
-            ValueField = ListBoundField.Text;
+            ValueField = ListBoundField.Value;
+            ItemChanged += OnItemChanged;
+            SortAlphabetically = true;
+        }
+
+        void OnItemChanged(object sender, PropertyEditorEventArgs e)
+        {
+            var regionContainer = ControlUtilities.FindControl<Control>(Parent, "Region", true);
+            if (regionContainer != null)
+            {
+                var regionControl = ControlUtilities.FindFirstDescendent<DNNRegionEditControl>(regionContainer);
+                if (regionControl != null)
+                {
+                    var listController = new ListController();
+                    var countries = listController.GetListEntryInfoItems("Country");
+                    foreach (var checkCountry in countries)
+                    {
+                        if (checkCountry.Value == e.StringValue)
+                        {
+                            var attributes = new object[1];
+                            attributes[0] = new ListAttribute("Region", "Country." + checkCountry.Value, ListBoundField.Value, ListBoundField.Text);
+                            regionControl.CustomAttributes = attributes;
+                            break;
+                        }
+                    }
+                }
+            }
         }
     }
 }

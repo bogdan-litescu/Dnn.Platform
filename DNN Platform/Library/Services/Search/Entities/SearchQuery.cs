@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -128,12 +128,33 @@ namespace DotNetNuke.Services.Search.Entities
         public SortFields SortField { get; set; }
 
         /// <summary>
+        /// Sort option of the search result. This field is optional.
+        /// </summary>
+        public SortDirections SortDirection { get; set; }
+
+        /// <summary>
+        /// Name of the custom sort field, works with SortFields.CustomNumericField or SortFields.CustomStringField option.
+        /// </summary>
+        /// <remarks> Enum SortFields can be used to sort on Relevance, LastModified and Title. Additional fields such as one provided under
+        /// SearchDocument.Keywords, SearchDocument.NumericKeys or Tags can be specified.
+        /// can be specified by using CustomSortField property. One needs to ensure that the field name is a valid one.
+        /// </remarks>
+        /// <example>authorid or authorname</example>
+        public string CustomSortField { get; set; }
+
+        /// <summary>
         /// Set this to true to perform perform WildCard Search.
         /// </summary>
         /// <remarks>This property is not respected when Keywords contain special boolean phrases "~", "*", "\"", "\'", "and", "or", "+", "-".
         /// When this is enabled, an additional OR is performed, e.g. (keyword OR keyword*). It adds asterisk at then end to find any words starting with the keyword.
         /// There can be performance implications with this setting turned on.</remarks>
         public bool WildCardSearch { get; set; }
+
+        /// <summary>
+        /// Context information such as the type of module that initiated the search can be stored here.
+        /// <remarks>This is key-value pair, e.g. "SearchSource","SiteSearch"</remarks>
+        /// </summary>
+        public IDictionary<string, string> SearchContext { get; set; }
 
         #region constructor
 
@@ -147,6 +168,7 @@ namespace DotNetNuke.Services.Search.Entities
             BodySnippetLength = 100;
             PageSize = 10;
             PageIndex = 1;
+            SearchContext = new Dictionary<string, string>();
         }
 
         #endregion 

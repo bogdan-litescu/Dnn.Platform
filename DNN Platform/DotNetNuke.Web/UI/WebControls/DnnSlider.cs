@@ -1,6 +1,6 @@
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -22,65 +22,18 @@
 using System;
 
 using Telerik.Web.UI;
-using DotNetNuke.Services.Localization;
-using DotNetNuke.Web.UI;
-using System.Web.UI;
 
 #endregion
 
 namespace DotNetNuke.Web.UI.WebControls
 {
-   public class DnnSlider : RadSlider, ILocalizable
-   {
-      private bool _localize = true;
+    public class DnnSlider : RadSlider
+    {
 
-      protected override void Render(HtmlTextWriter writer)
-      {
-         LocalizeStrings();
-         base.Render(writer);
-      }
+        //public DnnSlider()
+        //{
+        //    Utilities.ApplySkin(this);
+        //}
 
-      public string ResourceKey { get; set; }
-
-#region ILocalizable Implementation
-      public bool Localize
-      {
-         get
-         {
-            if (base.DesignMode)
-            {
-               return false;
-            }
-            return _localize;
-         }
-         set
-         {
-            _localize = value;
-         }
-      }
-
-      public string LocalResourceFile { get; set; }
-
-      public virtual void LocalizeStrings()
-      {
-         if ((this.Localize) && (!(String.IsNullOrEmpty(this.ResourceKey))))
-         {
-            if (!(String.IsNullOrEmpty(base.DecreaseText)))
-            {
-               base.DecreaseText = Utilities.GetLocalizedStringFromParent(String.Format("{0}.Decrease", this.ResourceKey), this);
-            }
-
-            if (!(String.IsNullOrEmpty(base.DragText)))
-            {
-               base.DragText = Utilities.GetLocalizedStringFromParent(String.Format("{0}.Drag", this.ResourceKey), this);
-            }
-
-            if (!(String.IsNullOrEmpty(base.IncreaseText)))
-            {
-               base.IncreaseText = Utilities.GetLocalizedStringFromParent(String.Format("{0}.Increase", this.ResourceKey), this);
-            }
-         }
-      }
-#endregion
-   }
+    }
 }

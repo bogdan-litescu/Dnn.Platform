@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -88,29 +88,29 @@ namespace DotNetNuke.UI.Skins.Controls
         {
             base.OnLoad(e);
 
+
             if (PortalSettings.BannerAdvertising != 0 && Visible)
             {
                 int BannerType = 0;
-                if (AllowNullBannerType)
+                //read bannertype from definition, if not use portalsetting
+                if (!string.IsNullOrEmpty(BannerTypeId))
                 {
-                    if (!string.IsNullOrEmpty(BannerTypeId))
-                    {
-                        BannerType = Int32.Parse(Convert.ToString(BannerTypeId));
-                    }
+                    BannerType = Int32.Parse(Convert.ToString(BannerTypeId));
                 }
                 else
                 {
-                    if (string.IsNullOrEmpty(BannerTypeId))
+                    if (AllowNullBannerType)
                     {
                         BannerType = PortalController.GetPortalSettingAsInteger("BannerTypeId", PortalSettings.PortalId, 1);
                     }
                 }
-				
-				//public attributes
+
+                //public attributes
                 if (String.IsNullOrEmpty(GroupName))
                 {
                     GroupName = PortalController.GetPortalSetting("BannerGroupName", PortalSettings.PortalId, "");
                 }
+
                 if (String.IsNullOrEmpty(BannerCount))
                 {
                     BannerCount = "1";

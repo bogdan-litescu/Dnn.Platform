@@ -2,7 +2,7 @@
 
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -135,21 +135,32 @@ namespace DotNetNuke.Modules.Admin.Users
 
                 object setting = GetSetting(PortalId, "Redirect_AfterRegistration");
 
-				if (Convert.ToInt32(setting) <= 0)
+                if (Convert.ToInt32(setting) > 0) //redirect to after registration page
+                {
+                    _RedirectURL = Globals.NavigateURL(Convert.ToInt32(setting));
+                }
+                else
+                {
+                
+                if (Convert.ToInt32(setting) <= 0)
                 {
                     if (Request.QueryString["returnurl"] != null)
                     {
                         //return to the url passed to register
                         _RedirectURL = HttpUtility.UrlDecode(Request.QueryString["returnurl"]);
                         //redirect url should never contain a protocol ( if it does, it is likely a cross-site request forgery attempt )
-                        if (_RedirectURL.Contains("://") && !_RedirectURL.StartsWith(Globals.AddHTTP(PortalSettings.PortalAlias.HTTPAlias), StringComparison.InvariantCultureIgnoreCase))
+                        if (_RedirectURL.Contains("://") &&
+                            !_RedirectURL.StartsWith(Globals.AddHTTP(PortalSettings.PortalAlias.HTTPAlias),
+                                StringComparison.InvariantCultureIgnoreCase))
                         {
                             _RedirectURL = "";
                         }
                         if (_RedirectURL.Contains("?returnurl"))
                         {
-                            string baseURL = _RedirectURL.Substring(0, _RedirectURL.IndexOf("?returnurl", StringComparison.Ordinal));
-                            string returnURL = _RedirectURL.Substring(_RedirectURL.IndexOf("?returnurl", StringComparison.Ordinal) + 11);
+                            string baseURL = _RedirectURL.Substring(0,
+                                _RedirectURL.IndexOf("?returnurl", StringComparison.Ordinal));
+                            string returnURL =
+                                _RedirectURL.Substring(_RedirectURL.IndexOf("?returnurl", StringComparison.Ordinal) + 11);
 
                             _RedirectURL = string.Concat(baseURL, "?returnurl", HttpUtility.UrlEncode(returnURL));
                         }
@@ -164,9 +175,12 @@ namespace DotNetNuke.Modules.Admin.Users
                 {
                     _RedirectURL = Globals.NavigateURL(Convert.ToInt32(setting));
                 }
+                }
+
                 return _RedirectURL;
             }
-        }
+        
+		}
 
         protected string RegistrationFields
         {
@@ -264,6 +278,10 @@ namespace DotNetNuke.Modules.Admin.Users
 
         private void AddField(string dataField, string dataMember, bool required, string regexValidator, TextBoxMode textMode)
         {
+			if(userForm.Items.Any(i => i.ID == dataField)){
+				return;
+			}
+			
             var formItem = new DnnFormTextBoxItem
                                {
                                    ID = dataField,
@@ -308,10 +326,12 @@ namespace DotNetNuke.Modules.Admin.Users
             formItem.Required = required;
 
             userForm.Items.Add(formItem);
+		
         }
 
         private void AddPasswordConfirmField(string dataField, string dataMember, bool required)
         {
+		
             var formItem = new DnnFormTextBoxItem
             {
                 ID = dataField,
@@ -323,10 +343,15 @@ namespace DotNetNuke.Modules.Admin.Users
                 TextBoxCssClass = ConfirmPasswordTextBoxCssClass,
             };
             userForm.Items.Add(formItem);
+		
         }
 
         private void AddProperty(ProfilePropertyDefinition property)
         {
+			if(userForm.Items.Any(i => i.ID == property.PropertyName)){
+				return;
+			}
+			
             var controller = new ListController();
             ListEntryInfo imageType = controller.GetListEntryInfo("DataType", "Image");
             if (property.DataType != imageType.EntryID)
@@ -567,7 +592,7 @@ namespace DotNetNuke.Modules.Admin.Users
             //Validate Unique Display Name
             if (CreateStatus == UserCreateStatus.AddUser && RequireUniqueDisplayName)
             {
-                user = TestableUserController.Instance.GetUserByDisplayname(PortalId, User.DisplayName);
+                user = UserController.Instance.GetUserByDisplayname(PortalId, User.DisplayName);
                 if (user != null)
                 {
                     CreateStatus = UserCreateStatus.DuplicateDisplayName;
@@ -576,7 +601,7 @@ namespace DotNetNuke.Modules.Admin.Users
                     while (user != null)
                     {
                         displayName = User.DisplayName + " 0" + i.ToString(CultureInfo.InvariantCulture);
-                        user = TestableUserController.Instance.GetUserByDisplayname(PortalId, displayName);
+                        user = UserController.Instance.GetUserByDisplayname(PortalId, displayName);
                         i++;
                     }
                     User.DisplayName = displayName;
@@ -728,7 +753,8 @@ namespace DotNetNuke.Modules.Admin.Users
             //Verify that the current user has access to this page
             if (PortalSettings.UserRegistration == (int)Globals.PortalRegistrationType.NoRegistration && Request.IsAuthenticated == false)
             {
-                Response.Redirect(Globals.NavigateURL("Access Denied"), true);
+                Response.Redirect(Globals.NavigateURL("Access Denied"), false);
+                Context.ApplicationInstance.CompleteRequest();
             }
 
             cancelButton.Click += cancelButton_Click;
@@ -866,8 +892,10 @@ namespace DotNetNuke.Modules.Admin.Users
                 }
                 else
                 {
-                    AddLocalizedModuleMessage(UserController.GetUserCreateStatus(CreateStatus), ModuleMessage.ModuleMessageType.RedError, true);
-                    userForm.DataBind();
+                    if (CreateStatus != UserCreateStatus.AddUser)
+                    {
+                        AddLocalizedModuleMessage(UserController.GetUserCreateStatus(CreateStatus), ModuleMessage.ModuleMessageType.RedError, true);
+                    }
                 }
             }
         }

@@ -1,4 +1,4 @@
-﻿function MemberDirectory($, ko, settings) {
+﻿function MemberDirectory($, ko, settings, composeMessageSettings) {
     var opts = $.extend({}, MemberDirectory.defaultSettings, settings);
     var serviceFramework = settings.servicesFramework;
     var baseServicepath = serviceFramework.getServiceRoot('MemberDirectory') + 'MemberDirectory/';
@@ -80,7 +80,7 @@
         self.Website = ko.observable(item.Website);
         self.PhotoURL = ko.observable(item.PhotoURL);
         self.ProfileProperties = ko.observable(item.ProfileProperties);
-
+        self.ProfileUrl  = ko.observable(item.ProfileUrl);
         self.Location = ko.computed(function () {
             var city = self.City();
             var country = self.Country();
@@ -94,15 +94,6 @@
 
             return location;
         });
-
-        self.ProfileUrl = ko.computed(function () {
-            var url = "";
-            var userId = self.UserId();
-            if (userId != undefined) {
-                url = profileUrl.replace(new RegExp(profileUrlUserToken, "gi"), self.UserId().toString());
-            }
-            return url;
-        }, this);
         
         self.getProfilePicture = function (w, h) {
             return profilePicHandler.replace("{0}", self.UserId()).replace("{1}", h).replace("{2}", w);
@@ -469,16 +460,17 @@
                     $(".mdSearch").removeClass("active");
                 });
 
-                //Compose Message
-                $.fn.dnnComposeMessage({
-                    openTriggerSelector: containerElement + " .ComposeMessage",
-                    onPrePopulate: function (target) {
-                        var context = ko.contextFor(target);
-                        var prePopulatedRecipients = [{ id: "user-" + context.$data.UserId(), name: context.$data.DisplayName()}];
-                        return prePopulatedRecipients;
-                    },
-                    servicesFramework: serviceFramework
-                });
+            	//Compose Message
+	            var options = $.extend({}, {
+		            openTriggerSelector: containerElement + " .ComposeMessage",
+		            onPrePopulate: function(target) {
+			            var context = ko.contextFor(target);
+			            var prePopulatedRecipients = [{ id: "user-" + context.$data.UserId(), name: context.$data.DisplayName() }];
+			            return prePopulatedRecipients;
+		            },
+		            servicesFramework: serviceFramework
+	            }, composeMessageSettings);
+                $.fn.dnnComposeMessage(options);
             } else {
                 displayMessage(settings.serverErrorText, "dnnFormWarning");
             }

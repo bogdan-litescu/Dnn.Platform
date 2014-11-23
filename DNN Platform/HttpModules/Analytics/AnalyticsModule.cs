@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -112,13 +112,11 @@ namespace DotNetNuke.HttpModules.Analytics
             }
             catch (Exception ex)
             {
-                var objEventLog = new EventLogController();
-                var objEventLogInfo = new LogInfo();
-                objEventLogInfo.AddProperty("Analytics.AnalyticsModule", "OnPreRequestHandlerExecute");
-                objEventLogInfo.AddProperty("ExceptionMessage", ex.Message);
-                objEventLogInfo.LogTypeKey = EventLogController.EventLogType.HOST_ALERT.ToString();
-                objEventLog.AddLog(objEventLogInfo);
-                Logger.Error(objEventLogInfo);
+                var log = new LogInfo {LogTypeKey = EventLogController.EventLogType.HOST_ALERT.ToString()};
+                log.AddProperty("Analytics.AnalyticsModule", "OnPreRequestHandlerExecute");
+                log.AddProperty("ExceptionMessage", ex.Message);
+                LogController.Instance.AddLog(log);
+                Logger.Error(log);
 
             }
         }
@@ -184,12 +182,10 @@ namespace DotNetNuke.HttpModules.Analytics
             }
             catch (Exception ex)
             {
-                var objEventLog = new EventLogController();
-                var objEventLogInfo = new LogInfo();
-                objEventLogInfo.AddProperty("Analytics.AnalyticsModule", "OnPageLoad");
-                objEventLogInfo.AddProperty("ExceptionMessage", ex.Message);
-                objEventLogInfo.LogTypeKey = EventLogController.EventLogType.HOST_ALERT.ToString();
-                objEventLog.AddLog(objEventLogInfo);
+                var log = new LogInfo {LogTypeKey = EventLogController.EventLogType.HOST_ALERT.ToString()};
+                log.AddProperty("Analytics.AnalyticsModule", "OnPageLoad");
+                log.AddProperty("ExceptionMessage", ex.Message);
+                LogController.Instance.AddLog(log);
                 Logger.Error(ex);
 
             }

@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -28,6 +28,7 @@ using System.Data;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Web;
 using System.Xml;
@@ -35,11 +36,11 @@ using System.Xml.Serialization;
 
 using DotNetNuke.Collections.Internal;
 using DotNetNuke.Common;
+using DotNetNuke.Common.Internal;
 using DotNetNuke.Common.Utilities;
 using DotNetNuke.Entities.Content;
 using DotNetNuke.Entities.Modules;
 using DotNetNuke.Entities.Portals;
-using DotNetNuke.Entities.Tabs.Internal;
 using DotNetNuke.Entities.Users;
 using DotNetNuke.Security.Permissions;
 using DotNetNuke.Services.Exceptions;
@@ -234,7 +235,7 @@ namespace DotNetNuke.Entities.Tabs
         {
             get
             {
-                return new ModuleController().GetTabModules(TabID);
+                return ModuleController.Instance.GetTabModules(TabID);
             }
         }
 
@@ -245,8 +246,7 @@ namespace DotNetNuke.Entities.Tabs
             {
                 if (_defaultLanguageTab == null && (!DefaultLanguageGuid.Equals(Null.NullGuid)))
                 {
-                    var tabCtrl = new TabController();
-                    _defaultLanguageTab = (from kvp in tabCtrl.GetTabsByPortal(PortalID) where kvp.Value.UniqueId == DefaultLanguageGuid select kvp.Value).SingleOrDefault();
+                    _defaultLanguageTab = (from kvp in TabController.Instance.GetTabsByPortal(PortalID) where kvp.Value.UniqueId == DefaultLanguageGuid select kvp.Value).SingleOrDefault();
                 }
                 return _defaultLanguageTab;
             }
@@ -441,9 +441,8 @@ namespace DotNetNuke.Entities.Tabs
             {
                 if (_localizedTabs == null)
                 {
-                    var tabCtrl = new TabController();
                     _localizedTabs =
-                        (from kvp in tabCtrl.GetTabsByPortal(PortalID)
+                        (from kvp in TabController.Instance.GetTabsByPortal(PortalID)
                          where kvp.Value.DefaultLanguageGuid == UniqueId && LocaleController.Instance.GetLocale(PortalID, kvp.Value.CultureCode) != null
                          select kvp.Value).ToDictionary(t => t.CultureCode);
                 }
@@ -486,7 +485,7 @@ namespace DotNetNuke.Entities.Tabs
         {
             get
             {
-                return _settings ?? (_settings = (TabID == Null.NullInteger) ? new Hashtable() : new TabController().GetTabSettings(TabID));
+                return _settings ?? (_settings = (TabID == Null.NullInteger) ? new Hashtable() : TabController.Instance.GetTabSettings(TabID));
             }
         }
 
@@ -508,7 +507,7 @@ namespace DotNetNuke.Entities.Tabs
         {
             get
             {
-                return _aliasSkins ?? (_aliasSkins = (TabID == Null.NullInteger) ? new List<TabAliasSkinInfo>() : TestableTabController.Instance.GetAliasSkins(TabID, PortalID));
+                return _aliasSkins ?? (_aliasSkins = (TabID == Null.NullInteger) ? new List<TabAliasSkinInfo>() : TabController.Instance.GetAliasSkins(TabID, PortalID));
             }
         }
 
@@ -517,7 +516,7 @@ namespace DotNetNuke.Entities.Tabs
         {
             get
             {
-                return _customAliases ?? (_customAliases = (TabID == Null.NullInteger) ? new Dictionary<string, string>() : TestableTabController.Instance.GetCustomAliases(TabID, PortalID));
+                return _customAliases ?? (_customAliases = (TabID == Null.NullInteger) ? new Dictionary<string, string>() : TabController.Instance.GetCustomAliases(TabID, PortalID));
             }
         }
 
@@ -526,7 +525,7 @@ namespace DotNetNuke.Entities.Tabs
         {
             get
             {
-                var key = string.Format("{0}_{1}", Globals.AddHTTP(PortalSettings.Current.PortalAlias.HTTPAlias),
+                var key = string.Format("{0}_{1}", TestableGlobals.Instance.AddHTTP(PortalSettings.Current.PortalAlias.HTTPAlias),
                                             Thread.CurrentThread.CurrentCulture);
 
                 string fullUrl;
@@ -543,15 +542,15 @@ namespace DotNetNuke.Entities.Tabs
                         {
                             case TabType.Normal:
                                 //normal tab
-                                fullUrl = Globals.NavigateURL(TabID, IsSuperTab);
+                                fullUrl = TestableGlobals.Instance.NavigateURL(TabID, IsSuperTab);
                                 break;
                             case TabType.Tab:
                                 //alternate tab url
-                                fullUrl = Globals.NavigateURL(Convert.ToInt32(Url));
+                                fullUrl = TestableGlobals.Instance.NavigateURL(Convert.ToInt32(Url));
                                 break;
                             case TabType.File:
                                 //file url
-                                fullUrl = Globals.LinkClick(Url, TabID, Null.NullInteger);
+                                fullUrl = TestableGlobals.Instance.LinkClick(Url, TabID, Null.NullInteger);
                                 break;
                             case TabType.Url:
                                 //external url
@@ -584,7 +583,7 @@ namespace DotNetNuke.Entities.Tabs
         {
             get
             {
-                return _tabUrls ?? (_tabUrls = (TabID == Null.NullInteger) ? new List<TabUrlInfo>() : TestableTabController.Instance.GetTabUrls(TabID, PortalID));
+                return _tabUrls ?? (_tabUrls = (TabID == Null.NullInteger) ? new List<TabUrlInfo>() : TabController.Instance.GetTabUrls(TabID, PortalID));
             }
         }
 
@@ -786,13 +785,23 @@ namespace DotNetNuke.Entities.Tabs
             string doctypeConfig = string.Empty;
             if (!string.IsNullOrEmpty(SkinSrc))
             {
-                string fileName = HttpContext.Current.Server.MapPath(SkinSrc.Replace(".ascx", ".doctype.xml"));
-                if (File.Exists(fileName))
+                string packageFileName = HttpContext.Current.Server.MapPath(Regex.Replace(SkinSrc, @"([^/]+$)", "skin.doctype.xml", RegexOptions.CultureInvariant));
+                string skinFileName = HttpContext.Current.Server.MapPath(SkinSrc.Replace(".ascx", ".doctype.xml"));
+                if (File.Exists(packageFileName) || File.Exists(skinFileName))
                 {
                     try
                     {
                         var xmlSkinDocType = new XmlDocument();
-                        xmlSkinDocType.Load(fileName);
+                        if (File.Exists(skinFileName))
+                        {
+                            // default to the skinname.doctype.xml to allow the individual skin to override the skin package
+                            xmlSkinDocType.Load(skinFileName);
+                        }
+                        else
+                        {
+                            // use the skin.doctype.xml file
+                            xmlSkinDocType.Load(packageFileName);
+                        }
                         string strDocType = xmlSkinDocType.FirstChild.InnerText;
                         doctypeConfig = strDocType;
                     }
@@ -837,6 +846,11 @@ namespace DotNetNuke.Entities.Tabs
             _tabUrls = null;
         }
 
+        internal void ClearSettingsCache()
+        {
+            _settings = null;
+        }
+
         #endregion
 
         #region Public Methods
@@ -844,39 +858,36 @@ namespace DotNetNuke.Entities.Tabs
         public TabInfo Clone()
         {
             var clonedTab = new TabInfo(_localizedTabNameDictionary, _fullUrlDictionary)
-                                 {
-                                     TabID = TabID,
-                                     TabOrder = TabOrder,
-                                     PortalID = PortalID,
-                                     TabName = TabName,
-                                     IsVisible = IsVisible,
-                                     ParentId = ParentId,
-                                     Level = Level,
-                                     IconFile = _iconFileRaw,
-                                     IconFileLarge = _iconFileLargeRaw,
-                                     DisableLink = DisableLink,
-                                     Title = Title,
-                                     Description = Description,
-                                     KeyWords = KeyWords,
-                                     IsDeleted = IsDeleted,
-                                     Url = Url,
-                                     SkinSrc = SkinSrc,
-                                     ContainerSrc = ContainerSrc,
-                                     TabPath = TabPath,
-                                     StartDate = StartDate,
-                                     EndDate = EndDate,
-                                     HasChildren = HasChildren,
-                                     SkinPath = SkinPath,
-                                     ContainerPath = ContainerPath,
-                                     IsSuperTab = IsSuperTab,
-                                     RefreshInterval = RefreshInterval,
-                                     PageHeadText = PageHeadText,
-                                     IsSecure = IsSecure,
-                                     PermanentRedirect = PermanentRedirect
-                                 };
-
-
-
+            {
+                TabID = TabID,
+                TabOrder = TabOrder,
+                PortalID = PortalID,
+                TabName = TabName,
+                IsVisible = IsVisible,
+                ParentId = ParentId,
+                Level = Level,
+                IconFile = _iconFileRaw,
+                IconFileLarge = _iconFileLargeRaw,
+                DisableLink = DisableLink,
+                Title = Title,
+                Description = Description,
+                KeyWords = KeyWords,
+                IsDeleted = IsDeleted,
+                Url = Url,
+                SkinSrc = SkinSrc,
+                ContainerSrc = ContainerSrc,
+                TabPath = TabPath,
+                StartDate = StartDate,
+                EndDate = EndDate,
+                HasChildren = HasChildren,
+                SkinPath = SkinPath,
+                ContainerPath = ContainerPath,
+                IsSuperTab = IsSuperTab,
+                RefreshInterval = RefreshInterval,
+                PageHeadText = PageHeadText,
+                IsSecure = IsSecure,
+                PermanentRedirect = PermanentRedirect
+            };
 
             if (BreadCrumbs != null)
             {
@@ -887,7 +898,7 @@ namespace DotNetNuke.Entities.Tabs
                 }
             }
 
-	        Clone(clonedTab, this);
+            Clone(clonedTab, this);
 
             //localized properties
             clonedTab.UniqueId = UniqueId;
@@ -898,6 +909,7 @@ namespace DotNetNuke.Entities.Tabs
 
             clonedTab.Panes = new ArrayList();
             clonedTab.Modules = new ArrayList();
+
             return clonedTab;
         }
 

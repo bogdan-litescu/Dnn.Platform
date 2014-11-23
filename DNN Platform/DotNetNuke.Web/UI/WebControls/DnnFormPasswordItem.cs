@@ -1,7 +1,7 @@
 ﻿#region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -25,8 +25,8 @@ using System.Web.UI;
 using System.Web.UI.WebControls;
 using DotNetNuke.Common.Utilities;
 using DotNetNuke.Framework;
+using DotNetNuke.Framework.JavaScriptLibraries;
 using DotNetNuke.Web.Client.ClientResourceManagement;
-using Newtonsoft.Json;
 
 #endregion
 
@@ -80,6 +80,7 @@ namespace DotNetNuke.Web.UI.WebControls
                 MaxLength = 20, //ensure password cannot be cut if too long
                 Text = Convert.ToString(Value) // Load from ControlState
             };
+            _password.Attributes.Add("autocomplete", "off");
             _password.TextChanged += TextChanged;
 
             var passwordContainer = new Panel() { ID = "passwordContainer", CssClass = ContainerCssClass };
@@ -100,7 +101,7 @@ namespace DotNetNuke.Web.UI.WebControls
             ClientResourceManager.RegisterScript(Page, "~/Resources/Shared/scripts/dnn.jquery.tooltip.js");
             ClientResourceManager.RegisterScript(Page, "~/Resources/Shared/scripts/dnn.PasswordStrength.js");
 
-            jQuery.RequestDnnPluginsRegistration();
+            JavaScript.RequestRegistration(CommonJs.DnnPlugins);
         }
 
         protected override void OnPreRender(EventArgs e)
@@ -108,8 +109,7 @@ namespace DotNetNuke.Web.UI.WebControls
             base.OnPreRender(e);
 
             var options = new DnnPaswordStrengthOptions();
-            var optionsAsJsonString = JsonConvert.SerializeObject(options);
-            
+            var optionsAsJsonString = Json.Serialize(options);
             var script = string.Format("dnn.initializePasswordStrength('.{0}', {1});{2}",
                 TextBoxCssClass, optionsAsJsonString, Environment.NewLine);
 

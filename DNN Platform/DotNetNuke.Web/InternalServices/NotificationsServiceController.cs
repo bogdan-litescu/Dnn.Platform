@@ -2,7 +2,7 @@
 
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -22,6 +22,8 @@
 #endregion
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Web.Http;
@@ -36,14 +38,10 @@ namespace DotNetNuke.Web.InternalServices
     public class NotificationsServiceController : DnnApiController
     {
     	private static readonly ILog Logger = LoggerSource.Instance.GetLogger(typeof (NotificationsServiceController));
-        public class DismissDTO
-        {
-            public int NotificationId { get; set; }
-        }
         
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public HttpResponseMessage Dismiss(DismissDTO postData)
+        public HttpResponseMessage Dismiss(NotificationDTO postData)
         {
             try
             {
@@ -62,5 +60,20 @@ namespace DotNetNuke.Web.InternalServices
                 return Request.CreateErrorResponse(HttpStatusCode.InternalServerError, exc);
             }
         }
+
+
+		[HttpGet]
+		public HttpResponseMessage GetToasts()
+		{
+			var toasts = NotificationsController.Instance.GetToasts(this.UserInfo);
+			IList<object> convertedObjects = toasts.Select(ToExpandoObject).ToList();
+			return Request.CreateResponse(HttpStatusCode.OK, new { Success = true, Toasts = convertedObjects.Take(3) });
+		}
+
+		private object ToExpandoObject(Notification notification)
+		{
+			return new {Subject = notification.Subject, Body = notification.Body};
+		}
+
     }
 }

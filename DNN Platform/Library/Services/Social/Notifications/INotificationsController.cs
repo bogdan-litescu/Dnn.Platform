@@ -1,7 +1,7 @@
 ﻿#region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -179,5 +179,37 @@ namespace DotNetNuke.Services.Social.Notifications
         IList<Notification> GetNotificationByContext(int notificationTypeId, string context);
 
         #endregion
+
+		#region Toast APIS
+
+		/// <summary>
+		/// Is there a Toast that needs to be sent for a Notification
+		/// </summary>
+		/// <param name="notificationId">The Notification Id </param>
+		/// <returns>True if Toast needs to be sent. False otherwise.</returns>
+		bool IsToastPending(int notificationId);
+
+		/// <summary>
+		/// Mark a Toast ready for sending
+		/// </summary>
+		/// <param name="notification">The notification Object </param>
+		/// <param name="userInfo">The Recipient User Info Object</param>
+		void MarkReadyForToast(Notification notification, UserInfo userInfo);
+
+		/// <summary>
+		/// Mark Toast being already sent
+		/// </summary>
+		/// <param name="notificationId">The notification Id </param>
+		/// <param name="userId">The Recipient User Id </param>
+		void MarkToastSent(int notificationId, int userId);
+
+		/// <summary>
+		/// Get a list of Toasts that have not been delivered yet.
+		/// </summary>
+		/// <param name="userInfo">UserInfo object</param>
+		/// <returns>List of Undelivered Toasts for the user specific to the portal</returns>
+		IList<Notification> GetToasts(UserInfo userInfo);
+
+		#endregion
     }
 }

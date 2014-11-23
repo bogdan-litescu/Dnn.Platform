@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -20,6 +20,8 @@
 #endregion
 #region Usings
 
+using System;
+
 using DotNetNuke.Common.Utilities;
 using DotNetNuke.Security;
 
@@ -31,6 +33,7 @@ namespace DotNetNuke.Services.Installer.Packages
     /// This class allows PackageType to have a memeber named PackageType
     /// to remain compatible with the original VB implementation
     /// </summary>
+    [Serializable]
     public class PackageTypeMemberNameFixer
     {
         public PackageTypeMemberNameFixer()
@@ -46,10 +49,12 @@ namespace DotNetNuke.Services.Installer.Packages
     /// The PackageType class represents a single Installer Package Type
     /// </summary>
     /// -----------------------------------------------------------------------------
+    [Serializable]
     public class PackageType : PackageTypeMemberNameFixer
     {
         public string Description { get; set; }
         public string EditorControlSrc { get; set; }
         public SecurityAccessLevel SecurityAccessLevel { get; set; }
+        public bool SupportsSideBySideInstallation { get; set; }
     }
 }

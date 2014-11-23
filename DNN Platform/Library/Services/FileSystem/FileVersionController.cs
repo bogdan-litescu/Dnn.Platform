@@ -2,7 +2,7 @@
 
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -27,17 +27,30 @@ using System.IO;
 using System.Linq;
 
 using DotNetNuke.Common;
+using DotNetNuke.Common.Internal;
 using DotNetNuke.Common.Utilities;
 using DotNetNuke.ComponentModel;
 using DotNetNuke.Data;
 using DotNetNuke.Entities.Portals;
+using DotNetNuke.Entities.Users;
+using DotNetNuke.Services.FileSystem.EventArgs;
 
 namespace DotNetNuke.Services.FileSystem
 {
     public class FileVersionController : ComponentBase<IFileVersionController, FileVersionController>, IFileVersionController
     {
-        #region database methods
+        #region Private Events
+        private event EventHandler<FileChangedEventArgs> FileChanged;
+        #endregion
 
+        #region Contructor
+        public FileVersionController()
+        {
+            RegisterEventHandlers();
+        }
+        #endregion
+
+        #region database methods
         public string AddFileVersion(IFileInfo file, int userId, bool published, bool removeOldestVersions, Stream content = null)
         {
             Requires.NotNull("file", file);
@@ -113,6 +126,9 @@ namespace DotNetNuke.Services.FileSystem
             folderProvider.RenameFile(
                     new FileInfo { FileName = GetVersionedFilename(file, newPublishedVersion), Folder = file.Folder, FolderId = file.FolderId, FolderMappingID = folderMapping.FolderMappingID, PortalId = folderMapping.PortalID }, 
                     file.FileName);
+            
+            // Notify File Changed
+            OnFileChanged(file, UserController.Instance.GetCurrentUserInfo().UserID);
         }
 
         public int DeleteFileVersion(IFileInfo file, int version)
@@ -134,6 +150,16 @@ namespace DotNetNuke.Services.FileSystem
                 folderProvider.RenameFile(
                     new FileInfo { FileId = file.FileId, FileName = GetVersionedFilename(file, newVersion), Folder = file.Folder, FolderId = file.FolderId, FolderMappingID = folderMapping.FolderMappingID, PortalId = folderMapping.PortalID }, 
                     file.FileName);
+
+                //Update the Last Modification Time
+                var providerLastModificationTime = folderProvider.GetLastModificationTime(file);
+                if (file.LastModificationTime != providerLastModificationTime)
+                {
+                    DataProvider.Instance().UpdateFileLastModificationTime(file.FileId, providerLastModificationTime);
+                }
+
+                // Notify File Changed
+                OnFileChanged(file, UserController.Instance.GetCurrentUserInfo().UserID);
             }
             else
             {
@@ -245,6 +271,25 @@ namespace DotNetNuke.Services.FileSystem
         #endregion
 
         #region helper methods
+        private void RegisterEventHandlers()
+        {
+            foreach (var events in EventHandlersContainer<IFileEventHandlers>.Instance.EventHandlers)
+            {
+                FileChanged += events.Value.FileOverwritten;
+            }
+        }
+
+        private void OnFileChanged(IFileInfo fileInfo, int userId)
+        {
+            if (FileChanged != null)
+            {
+                FileChanged(this, new FileChangedEventArgs
+                {
+                    FileInfo = fileInfo,
+                    UserId = userId
+                });
+            }
+        }
 
         private Stream GetVersionContent(FolderProvider provider, IFolderInfo folder, IFileInfo file, int version)
         {

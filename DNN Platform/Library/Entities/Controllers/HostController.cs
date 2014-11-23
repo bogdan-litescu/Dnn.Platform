@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -200,7 +200,22 @@ namespace DotNetNuke.Entities.Controllers
             return GetSettings().ToDictionary(c => c.Key, c => c.Value.Value);
         }
 
-		/// <summary>
+        /// <summary>
+        /// takes in a text value, decrypts it with a FIPS compliant algorithm and returns the value
+        /// </summary>
+        /// <param name="key">the host setting to read</param>
+        /// <param name="passPhrase">the pass phrase used for encryption/decryption</param>
+        /// <returns></returns>
+        public string GetEncryptedString(string key, string passPhrase)
+        {
+            Requires.NotNullOrEmpty("key", key);
+            Requires.NotNullOrEmpty("passPhrase", passPhrase);
+            var cipherText = GetString(key);
+            return Security.FIPSCompliant.DecryptAES(cipherText, passPhrase, Entities.Host.Host.GUID);
+        }
+
+
+        /// <summary>
 		/// Gets the setting value by the specific key.
 		/// </summary>
 		/// <param name="key">The key.</param>
@@ -260,7 +275,6 @@ namespace DotNetNuke.Entities.Controllers
 		/// <param name="clearCache">if set to <c>true</c> will clear cache after update the setting.</param>
         public void Update(ConfigurationSetting config, bool clearCache)
         {
-            var objEventLog = new EventLogController();
             try
             {
                 var settings = GetSettingsFromDatabase();
@@ -270,21 +284,21 @@ namespace DotNetNuke.Entities.Controllers
                     settings.TryGetValue(config.Key, out currentconfig);
                     if (currentconfig != null && currentconfig.Value != config.Value)
                     {
-                        DataProvider.Instance().UpdateHostSetting(config.Key, config.Value, config.IsSecure, UserController.GetCurrentUserInfo().UserID);
-                        objEventLog.AddLog(config.Key,
+                        DataProvider.Instance().UpdateHostSetting(config.Key, config.Value, config.IsSecure, UserController.Instance.GetCurrentUserInfo().UserID);
+                        EventLogController.Instance.AddLog(config.Key,
                                            config.Value,
-                                           PortalController.GetCurrentPortalSettings(),
-                                           UserController.GetCurrentUserInfo().UserID,
+                                           PortalController.Instance.GetCurrentPortalSettings(),
+                                           UserController.Instance.GetCurrentUserInfo().UserID,
                                            EventLogController.EventLogType.HOST_SETTING_UPDATED);
                     }
                 }
                 else
                 {
-                    DataProvider.Instance().AddHostSetting(config.Key, config.Value, config.IsSecure, UserController.GetCurrentUserInfo().UserID);
-                    objEventLog.AddLog(config.Key,
+                    DataProvider.Instance().AddHostSetting(config.Key, config.Value, config.IsSecure, UserController.Instance.GetCurrentUserInfo().UserID);
+                    EventLogController.Instance.AddLog(config.Key,
                                        config.Value,
-                                       PortalController.GetCurrentPortalSettings(),
-                                       UserController.GetCurrentUserInfo().UserID,
+                                       PortalController.Instance.GetCurrentPortalSettings(),
+                                       UserController.Instance.GetCurrentUserInfo().UserID,
                                        EventLogController.EventLogType.HOST_SETTING_CREATED);
                 }
             }
@@ -295,7 +309,7 @@ namespace DotNetNuke.Entities.Controllers
 
             if ((clearCache))
             {
-                DataCache.ClearHostCache(false);
+                DataCache.RemoveCache(DataCache.HostSettingsCacheKey);
             }
         }
 
@@ -319,6 +333,23 @@ namespace DotNetNuke.Entities.Controllers
         {
             Update(key, value, true);
         }
+
+        /// <summary>
+        /// takes in a text value, encrypts it with a FIPS compliant algorithm and stores
+        /// </summary>
+        /// <param name="key">host settings key</param>
+        /// <param name="value">host settings value</param>
+        /// <param name="passPhrase">pass phrase to allow encryption/decryption</param>
+        public void UpdateEncryptedString(string key, string value, string passPhrase)
+        {
+            Requires.NotNullOrEmpty("key", key);
+            Requires.NotNull("value", value);
+            Requires.NotNullOrEmpty("passPhrase", passPhrase);
+            var cipherText = Security.FIPSCompliant.EncryptAES(value, passPhrase, Entities.Host.Host.GUID);
+            Update(key, cipherText);
+        }
+
+
 
         public void IncrementCrmVersion(bool includeOverridingPortals)
         {

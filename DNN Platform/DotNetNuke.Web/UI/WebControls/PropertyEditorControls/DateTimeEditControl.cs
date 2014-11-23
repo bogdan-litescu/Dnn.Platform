@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -22,6 +22,7 @@
 
 using System;
 using System.Collections.Specialized;
+using System.Data.SqlTypes;
 using System.Globalization;
 using System.Web.UI;
 using System.Web.UI.WebControls;
@@ -178,7 +179,7 @@ namespace DotNetNuke.Web.UI.WebControls.PropertyEditorControls
 			get
 			{
 				string _StringValue = Null.NullString;
-				if ((DateValue.ToUniversalTime().Date != DateTime.Parse("1754/01/01") && DateValue != Null.NullDate))
+                if ((DateValue.ToUniversalTime().Date != (DateTime)SqlDateTime.MinValue && DateValue != Null.NullDate))
 				{
 					_StringValue = DateValue.ToString(Format);
 				}
@@ -259,7 +260,7 @@ namespace DotNetNuke.Web.UI.WebControls.PropertyEditorControls
 					dataChanged = true;
 				}
 			}
-
+            LoadDateControls();
 			return dataChanged;
 		}
 

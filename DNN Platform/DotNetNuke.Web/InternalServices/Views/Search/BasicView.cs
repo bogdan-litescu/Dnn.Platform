@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -21,7 +21,7 @@
 #region Usings
 
 using System;
-
+using System.Collections.Generic;
 using DotNetNuke.Services.Search.Internals;
 
 #endregion
@@ -52,6 +52,16 @@ namespace DotNetNuke.Web.InternalServices.Views.Search
         /// Display Name of the Document Type
         /// </summary>
         public string DocumentTypeName { get; set; }
+
+        /// <summary>
+        /// Custom Attributes of the document.
+        /// </summary>
+        public IDictionary<string, string> Attributes { get; set; }
+
+        public BasicView()
+        {
+            Attributes = new Dictionary<string, string>();
+        }
 
     }
 }

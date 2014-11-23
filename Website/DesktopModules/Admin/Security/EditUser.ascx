@@ -5,6 +5,8 @@
 <%@ Register TagPrefix="dnn" TagName="Profile" Src="~/DesktopModules/Admin/Security/Profile.ascx" %>
 <%@ Register TagPrefix="dnn" TagName="MemberServices" Src="~/DesktopModules/Admin/Security/MemberServices.ascx" %>
 <%@ Register TagPrefix="dnn" Assembly="DotNetNuke.Web" Namespace="DotNetNuke.Web.UI.WebControls" %>
+<%@ Register TagPrefix="dnn" Namespace="DotNetNuke.Web.Client.ClientResourceManagement" Assembly="DotNetNuke.Web.Client" %>
+<%@ Register TagPrefix="dnn" TagName="UserSubscriptions" Src="~/DesktopModules/CoreMessaging/Subscriptions.ascx" %>
 
 <%@ Import Namespace="DotNetNuke.UI.Utilities" %>
 
@@ -13,7 +15,14 @@
     (function ($, Sys) {
         function setUpDnnEditUser() {
             $('#dnnEditUser').dnnTabs().dnnPanels();
-
+            //DNN-26777
+            $('#<%= cmdDelete.ClientID %>').dnnConfirm({
+                text: '<%= ClientAPI.GetSafeJSString(LocalizeString("UnregisterUser")) %>',
+                            yesText: '<%= Localization.GetSafeJSString("Yes.Text", Localization.SharedResourceFile) %>',
+                            noText: '<%= Localization.GetSafeJSString("No.Text", Localization.SharedResourceFile) %>',
+                            title: '<%= Localization.GetSafeJSString("Confirm.Text", Localization.SharedResourceFile) %>',
+                            isButton: false
+                        });
             var serviceFramework = $.ServicesFramework(<%=ModuleId %>);
 
             var closeText = '<%= ClientAPI.GetSafeJSString(LocalizeString("Close")) %>';
@@ -77,8 +86,11 @@
                     });
                 });
             });
+            
+            var dnn = dnn || {};
+            dnn.subscriptionsSettings = <%=UserSubscriptions.GetSettingsAsJson()%>;
+            dnn.subscriptionsController = new Subscription(ko, dnn.subscriptionsSettings,'dnnUserSubscriptions');
         }
-
 
         $(document).ready(function () {
             setUpDnnEditUser();
@@ -93,10 +105,14 @@
         });
     } (jQuery, window.Sys));
 </script>
+
+<dnn:DnnJsInclude ID="DnnJsInclude1" runat="server" PathNameAlias="SharedScripts" FilePath="knockout.js" />
+
 <div class="dnnForm dnnEditUser dnnClear" id="dnnEditUser" runat="server" ClientIDMode="Static">
     <ul class="dnnAdminTabNav dnnClear" id="adminTabNav" runat="server">
         <li><a href="#dnnUserDetails"><%=LocalizeString("cmdUser")%></a></li>
         <li><a href="#<%=dnnProfileDetails.ClientID%>"><%=LocalizeString("cmdProfile")%></a></li>
+        <li><a href="#dnnUserSubscriptions"><%=LocalizeString("cmdCommunications")%></a></li>
         <li id="servicesTab" runat="server"><a href="#<%=dnnServicesDetails.ClientID%>"><%=LocalizeString("cmdServices")%></a></li>
     </ul>
     <div id="dnnUserDetails" class="dnnUserDetails dnnClear">
@@ -110,7 +126,7 @@
                         <dnn:DnnFormTextBoxItem ID="email" runat="server" DataField="Email" Required="true" />
                    </Items>
                 </dnn:DnnFormEditor>
-                <asp:Panel class="dnnFormItem" ID="VanityUrlRow" runat="server" Visible="False">
+                <asp:Panel class="dnnFormItem" ID="VanityUrlRow" runat="server" Visible="False" ViewStateMode="Disabled">
                     <dnn:Label ID="VanityUrlLabel" runat="server" />
                     <asp:Label runat="server" ID="VanityUrl" />
                     <div class="dnnFormGroup" id="VanityUrlPanel" runat="Server">
@@ -144,6 +160,9 @@
     <asp:Panel id="dnnProfileDetails" runat="server" class="dnnProfileDetails dnnClear">
     	<dnn:Profile id="ctlProfile" runat="server"></dnn:Profile>
     </asp:Panel>
+    <div id="dnnUserSubscriptions" class="dnnUserSubscriptions">
+        <dnn:UserSubscriptions id="UserSubscriptions" runat="server" LocalResourceFile="~/DesktopModules/CoreMessaging/App_LocalResources/View.ascx.resx"></dnn:UserSubscriptions>
+    </div>
     <div id="dnnServicesDetails" runat="server" visible="false" class="dnnServicesDetails dnnClear">
     	<dnn:MemberServices id="ctlServices" runat="server"></dnn:MemberServices>
     </div>

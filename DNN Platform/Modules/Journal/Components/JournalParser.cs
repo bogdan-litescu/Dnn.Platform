@@ -26,6 +26,7 @@ namespace DotNetNuke.Modules.Journal.Components
         int ModuleId { get; set; }
 		UserInfo CurrentUser { get; set; }
         int OwnerPortalId { get; set; }
+        public int JournalId { get; set; }
         private readonly string url = "";
         private bool isAdmin;
 	    private bool isUnverifiedUser;
@@ -40,8 +41,7 @@ namespace DotNetNuke.Modules.Journal.Components
 			CurrentUser = userInfo;
             url = PortalSettings.DefaultPortalAlias;
             OwnerPortalId = portalSettings.PortalId;
-            var moduleController = new ModuleController();
-            ModuleInfo moduleInfo = moduleController.GetModule(moduleId);
+            ModuleInfo moduleInfo = ModuleController.Instance.GetModule(moduleId, PortalSettings.ActiveTab.TabID, false);
             if (moduleInfo.OwnerPortalID != portalSettings.PortalId)
             {
                 OwnerPortalId = moduleInfo.OwnerPortalID;
@@ -79,11 +79,26 @@ namespace DotNetNuke.Modules.Journal.Components
             string comment = Localization.GetString("comment", ResxPath);
             
             IList<JournalItem> journalList;
-            if (ProfileId > 0) {
+            if (JournalId > 0)
+            {
+                var journal = JournalController.Instance.GetJournalItem(PortalSettings.PortalId, CurrentUser.UserID,
+                                                                        JournalId, false, false, true);
+                journalList = new List<JournalItem>();
+                if (journal != null)
+                {
+                    journalList.Add(journal);
+                }
+            }
+            else if (ProfileId > 0) 
+            {
                 journalList = journalControllerInternal.GetJournalItemsByProfile(OwnerPortalId, ModuleId, CurrentUser.UserID, ProfileId, currentIndex, rows);
-            } else if (SocialGroupId > 0) {
+            } 
+            else if (SocialGroupId > 0) 
+            {
                 journalList = journalControllerInternal.GetJournalItemsByGroup(OwnerPortalId, ModuleId, CurrentUser.UserID, SocialGroupId, currentIndex, rows);
-            } else {
+            } 
+            else 
+            {
                 journalList = journalControllerInternal.GetJournalItems(OwnerPortalId, ModuleId, CurrentUser.UserID, currentIndex, rows);
             }
 
@@ -136,7 +151,7 @@ namespace DotNetNuke.Modules.Journal.Components
                     }
                 }
                 
-                ctl.CommentArea = GetCommentAreaHTML(ji.JournalId, comments, ji.CommentsHidden, ji.CommentsDisabled);
+                ctl.CommentArea = GetCommentAreaHTML(ji, comments);
 				ji.TimeFrame = DateUtils.CalculateDateForDisplay(ji.DateCreated);
                 ji.DateCreated = CurrentUser.LocalTime(ji.DateCreated);
  
@@ -154,7 +169,7 @@ namespace DotNetNuke.Modules.Journal.Components
 				string tmp = tokenReplace.ReplaceJournalItemTokens(rowTemplate);
                 tmp = tmp.Replace("<br>", "<br />");
                 sb.Append("<div class=\"journalrow\" id=\"jid-" + ji.JournalId + "\">");
-                if (isAdmin || CurrentUser.UserID == ji.UserId) {
+                if (isAdmin || CurrentUser.UserID == ji.UserId || (ProfileId > Null.NullInteger && CurrentUser.UserID == ProfileId)) {
                     sb.Append("<div class=\"minidel\" onclick=\"journalDelete(this);\"></div>");
                 }
 				sb.Append(tmp);
@@ -262,21 +277,24 @@ namespace DotNetNuke.Modules.Journal.Components
 			sb.Append("</div>");
 			return sb.ToString();
 		}
-        internal string GetCommentAreaHTML(int journalId, IList<CommentInfo> comments, bool commentsHidden, bool commentsDisabled) {
-            if (commentsHidden)
+
+        internal string GetCommentAreaHTML(JournalItem journal, IList<CommentInfo> comments) {
+            if (journal.CommentsHidden)
             {
                 return string.Empty;
             }
             var sb = new StringBuilder();
-            sb.AppendFormat("<ul class=\"jcmt\" id=\"jcmt-{0}\">", journalId);
+			sb.AppendFormat("<ul class=\"jcmt\" id=\"jcmt-{0}\">", journal.JournalId);
             foreach(CommentInfo ci in comments) {
-                if (ci.JournalId == journalId) {
-                    sb.Append(GetCommentRow(ci));
+				if (ci.JournalId == journal.JournalId)
+				{
+					sb.Append(GetCommentRow(journal, ci));
                 }
             }
-            if (CurrentUser.UserID > 0 && !commentsDisabled) {
-                sb.AppendFormat("<li id=\"jcmt-{0}-txtrow\" class=\"cmteditarea\">", journalId);
-                sb.AppendFormat("<textarea id=\"jcmt-{0}-txt\" class=\"cmteditor\"></textarea>", journalId);
+			if (CurrentUser.UserID > 0 && !journal.CommentsDisabled)
+			{
+				sb.AppendFormat("<li id=\"jcmt-{0}-txtrow\" class=\"cmteditarea\">", journal.JournalId);
+				sb.AppendFormat("<textarea id=\"jcmt-{0}-txt\" class=\"cmteditor\"></textarea>", journal.JournalId);
                 sb.Append("<div class=\"editorPlaceholder\">{resx:leavecomment}</div></li>");
                 sb.Append("<li class=\"cmtbtn\">");
                 sb.Append("<a href=\"#\">{resx:comment}</a></li>");
@@ -285,11 +303,12 @@ namespace DotNetNuke.Modules.Journal.Components
             sb.Append("</ul>");
             return sb.ToString();
         }
-        internal string GetCommentRow(CommentInfo comment) {
+
+        internal string GetCommentRow(JournalItem journal, CommentInfo comment) {
             var sb = new StringBuilder();
-            string pic = string.Format(Globals.UserProfilePicFormattedUrl(), comment.UserId, 32, 32);
+            string pic = string.Format(Globals.UserProfilePicRelativeUrl(), comment.UserId, 32, 32);
             sb.AppendFormat("<li id=\"cmt-{0}\">", comment.CommentId);
-            if (comment.UserId == CurrentUser.UserID || isAdmin) {
+            if (comment.UserId == CurrentUser.UserID || journal.UserId == CurrentUser.UserID || isAdmin) {
                 sb.Append("<div class=\"miniclose\"></div>");
             }
             sb.AppendFormat("<img src=\"{0}\" />", pic);

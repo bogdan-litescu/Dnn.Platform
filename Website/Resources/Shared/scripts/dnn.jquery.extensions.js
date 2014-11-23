@@ -12,7 +12,30 @@
 
         inContainer: function ($container, element) {
             return $container && $container.length !== 0 && ($.contains($container[0], element) || $container[0] === element);
+        },
+
+        bindIframeLoadEvent: function (iframe, callback) {
+            $(iframe).bind('load', function () {
+                // when we remove iframe from dom the request stops, but in IE load event fires
+                if (!iframe.parentNode) {
+                    return;
+                }
+                // fixing Opera 10.53
+                try {
+                    var contentDocument = iframe.contentDocument;
+                    if (contentDocument && contentDocument.body && contentDocument.body.innerHTML == "false") {
+                        // In Opera event is fired second time when body.innerHTML changed from false
+                        // to server response approx. after 1 sec when we upload file with iframe
+                        return;
+                    }
+                }
+                catch (ex) {
+                    // supress the exception;
+                }
+                callback();
+            });
         }
+
     });
 })(jQuery);
 
@@ -138,9 +161,11 @@ if (typeof dnn === "undefined" || dnn === null) { dnn = {}; }; //var dnn = dnn |
         },
 
         _onKeyUp: function (e) {
-            if (!this.element.value.ltrim().startsWith(this.prefix)) {
-                this.element.value = this.prefix + this.element.value;
-            }
+            this._prependPrefix();
+        },
+
+        _onFocus: function (e) {
+            this._prependPrefix();
         },
 
         _onBlur: function (e) {
@@ -149,8 +174,9 @@ if (typeof dnn === "undefined" || dnn === null) { dnn = {}; }; //var dnn = dnn |
             }
         },
 
-        _onFocus: function (e) {
-            if (!this.element.value.ltrim().startsWith(this.prefix)) {
+        _prependPrefix: function() {
+            var val = this.element.value;
+            if ((!val.ltrim().startsWith(this.prefix) && val !== "" && !this.prefix.startsWith(val)) || val === "") {
                 this.element.value = this.prefix + this.element.value;
             }
         }
@@ -247,6 +273,7 @@ if (typeof dnn === "undefined" || dnn === null) { dnn = {}; }; //var dnn = dnn |
         _resize: function (eventObject) {
             var currentPosition = this._getMousePosition(eventObject);
             var offsetX = currentPosition.x - this._initialPosition.x;
+            //offsetX = this.options.rl ? -offsetX : offsetX;
             var offsetY = currentPosition.y - this._initialPosition.y;
             var newSize = { width: this._initialSize.width + offsetX, height: this._initialSize.height + offsetY };
             this._setSize(newSize);

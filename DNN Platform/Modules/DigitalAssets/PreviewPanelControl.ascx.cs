@@ -1,7 +1,7 @@
 ﻿#region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -18,8 +18,6 @@
 // CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
 // DEALINGS IN THE SOFTWARE.
 #endregion
-
-using System;
 
 using DotNetNuke.Entities.Modules;
 using DotNetNuke.Modules.DigitalAssets.Components.Controllers;
@@ -52,11 +50,7 @@ namespace DotNetNuke.Modules.DigitalAssets
 
         protected ModuleInfo ModuleConfiguration { get; private set; }
         #endregion
-
-        #region Protected Methods
         
-        #endregion
-
         #region Public Methods
         public void SetPreviewInfo(PreviewInfoViewModel previewInfoViewModel)
         {

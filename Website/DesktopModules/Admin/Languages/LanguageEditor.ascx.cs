@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -22,13 +22,13 @@
 
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Web.UI;
 using System.Web.UI.WebControls;
 using System.Xml;
-
 using DotNetNuke.Common.Utilities;
 using DotNetNuke.Entities.Modules;
 using DotNetNuke.Entities.Modules.Actions;
@@ -36,12 +36,11 @@ using DotNetNuke.Instrumentation;
 using DotNetNuke.Security;
 using DotNetNuke.Services.Exceptions;
 using DotNetNuke.Services.Localization;
+using DotNetNuke.Services.Log.EventLog;
 using DotNetNuke.Services.Personalization;
 using DotNetNuke.UI.Skins.Controls;
 using DotNetNuke.UI.Utilities;
-
 using Telerik.Web.UI;
-
 using DataCache = DotNetNuke.Common.Utilities.DataCache;
 using DNNControls = DotNetNuke.UI.WebControls;
 using Globals = DotNetNuke.Common.Globals;
@@ -63,7 +62,7 @@ namespace DotNetNuke.Modules.Admin.Languages
     /// -----------------------------------------------------------------------------
     public partial class LanguageEditor : PortalModuleBase, IActionable
     {
-    	private static readonly ILog Logger = LoggerSource.Instance.GetLogger(typeof (LanguageEditor));
+        private static readonly ILog Logger = LoggerSource.Instance.GetLogger(typeof(LanguageEditor));
         #region Private Enums
 
         /// -----------------------------------------------------------------------------
@@ -237,8 +236,8 @@ namespace DotNetNuke.Modules.Admin.Languages
                     else
                     {
                         // Update default value
-                        var p = (Pair) EditTable[key];
-                        p.Second = ((Pair) DefaultTable[key]).First;
+                        var p = (Pair)EditTable[key];
+                        p.Second = ((Pair)DefaultTable[key]).First;
                         EditTable[key] = p;
                     }
                 }
@@ -704,14 +703,17 @@ namespace DotNetNuke.Modules.Admin.Languages
                 }
                 defDoc.Load(ResourceFile(Localization.SystemLocale, "System"));
 
+                //store all changed resources
+                var changedResources = new Dictionary<string, string>();
+
                 // only items different from default will be saved
                 foreach (GridDataItem di in resourcesGrid.Items)
                 {
                     if ((di.ItemType == GridItemType.Item || di.ItemType == GridItemType.AlternatingItem))
                     {
-                        var resourceKey = (Label) di.FindControl("resourceKey");
-                        var txtValue = (TextBox) di.FindControl("txtValue");
-                        var txtDefault = (TextBox) di.FindControl("txtDefault");
+                        var resourceKey = (Label)di.FindControl("resourceKey");
+                        var txtValue = (TextBox)di.FindControl("txtValue");
+                        var txtDefault = (TextBox)di.FindControl("txtDefault");
 
                         node = resDoc.SelectSingleNode(GetResourceKeyXPath(resourceKey.Text) + "/value");
 
@@ -724,7 +726,7 @@ namespace DotNetNuke.Modules.Admin.Languages
                                     node = AddResourceKey(resDoc, resourceKey.Text);
                                 }
                                 node.InnerXml = Server.HtmlEncode(txtValue.Text);
-
+                                if (txtValue.Text != txtDefault.Text) changedResources.Add(resourceKey.Text, txtValue.Text); 
                                 break;
                             case "Host":
                             case "Portal":
@@ -737,6 +739,7 @@ namespace DotNetNuke.Modules.Admin.Languages
                                         node = AddResourceKey(resDoc, resourceKey.Text);
                                     }
                                     node.InnerXml = Server.HtmlEncode(txtValue.Text);
+                                    changedResources.Add(resourceKey.Text, txtValue.Text);
                                 }
                                 else if ((node != null))
                                 {
@@ -792,6 +795,18 @@ namespace DotNetNuke.Modules.Admin.Languages
                         break;
                 }
                 string selectedFile = SelectedResourceFile.Replace(Server.MapPath(Globals.ApplicationPath + "/"), "");
+                if (changedResources.Count > 0)
+                {
+                    string values = string.Join("; ", changedResources.Select(x => x.Key + "=" + x.Value).ToArray());
+                    var log = new LogInfo {LogTypeKey = EventLogController.EventLogType.ADMIN_ALERT.ToString()};
+                    log.LogProperties.Add(new LogDetailInfo(Localization.GetString("ResourceUpdated", LocalResourceFile), ResourceFile(Locale, rbMode.SelectedValue)));
+                    log.LogProperties.Add(new LogDetailInfo("Updated Values", values));
+                    LogController.Instance.AddLog(log);
+                }
+                UI.Skins.Skin.AddModuleMessage(this,
+                                string.Format(Localization.GetString("Updated", LocalResourceFile), ResourceFile(Locale, rbMode.SelectedValue)),
+                                ModuleMessage.ModuleMessageType.GreenSuccess);
+
                 BindGrid(true);
             }
             catch (Exception exc)
@@ -904,26 +919,7 @@ namespace DotNetNuke.Modules.Admin.Languages
                     }
                     break;
                 case "Global Resources":
-                    node = new RadTreeNode();
-                    node.Text = LocalizeString("Exceptions");
-                    node.Value = Server.MapPath("~/App_GlobalResources/Exceptions");
-                    e.Node.Nodes.Add(node);
-                    node = new RadTreeNode();
-                    node.Text = Path.GetFileNameWithoutExtension(Localization.GlobalResourceFile);
-                    node.Value = Server.MapPath(Localization.GlobalResourceFile);
-                    e.Node.Nodes.Add(node);
-                    node = new RadTreeNode();
-                    node.Text = Path.GetFileNameWithoutExtension(Localization.SharedResourceFile);
-                    node.Value = Server.MapPath(Localization.SharedResourceFile);
-                    e.Node.Nodes.Add(node);
-                    node = new RadTreeNode();
-                    node.Text = LocalizeString("Template");
-                    node.Value = Server.MapPath("~/App_GlobalResources/Template");
-                    e.Node.Nodes.Add(node);
-                    node = new RadTreeNode();
-                    node.Text = LocalizeString("WebControls");
-                    node.Value = Server.MapPath("~/App_GlobalResources/WebControls");
-                    e.Node.Nodes.Add(node);
+                    GetResxFiles(Server.MapPath("~/App_GlobalResources"), e);
                     break;
                 case "Site Templates":
                     GetResxFiles(Server.MapPath("~/Portals/_default"), e);
@@ -942,7 +938,7 @@ namespace DotNetNuke.Modules.Admin.Languages
             foreach (string folder in Directory.GetDirectories(path))
             {
                 var folderInfo = new DirectoryInfo(folder);
-                var node = new RadTreeNode {Value = folderInfo.FullName, Text = folderInfo.Name, ExpandMode = TreeNodeExpandMode.ServerSideCallBack};
+                var node = new RadTreeNode { Value = folderInfo.FullName, Text = folderInfo.Name, ExpandMode = TreeNodeExpandMode.ServerSideCallBack };
 
                 if (HasLocalResources(folderInfo.FullName))
                 {
@@ -959,15 +955,18 @@ namespace DotNetNuke.Modules.Admin.Languages
             {
                 return true;
             }
+
+            bool hasResources = false;
             foreach (string folder in Directory.GetDirectories(path))
             {
                 if ((File.GetAttributes(folder) & FileAttributes.ReparsePoint) != FileAttributes.ReparsePoint)
                 {
                     folderInfo = new DirectoryInfo(folder);
-                    return HasLocalResources(folderInfo.FullName);
+                    hasResources = hasResources || HasLocalResources(folderInfo.FullName);
                 }
             }
-            return folderInfo.GetFiles("*.resx").Length > 0;
+            return hasResources || folderInfo.GetFiles("*.resx").Length > 0;
+
         }
 
         private void GetResxFiles(string path, RadTreeNodeEventArgs e)
@@ -981,7 +980,7 @@ namespace DotNetNuke.Modules.Admin.Languages
                 {
                     continue;
                 }
-                var node = new RadTreeNode {Value = fileInfo.FullName, Text = fileInfo.Name.Replace(".resx", "")};
+                var node = new RadTreeNode { Value = fileInfo.FullName, Text = fileInfo.Name.Replace(".resx", "") };
                 e.Node.Nodes.Add(node);
             }
         }
@@ -993,13 +992,13 @@ namespace DotNetNuke.Modules.Admin.Languages
                 if (e.Item.ItemType == GridItemType.AlternatingItem || e.Item.ItemType == GridItemType.Item)
                 {
                     HyperLink c = null;
-                    c = (HyperLink) e.Item.FindControl("lnkEdit");
+                    c = (HyperLink)e.Item.FindControl("lnkEdit");
                     if ((c != null))
                     {
                         ClientAPI.AddButtonConfirm(c, Localization.GetString("SaveWarning", LocalResourceFile));
                     }
 
-                    var p = (Pair) ((DictionaryEntry) e.Item.DataItem).Value;
+                    var p = (Pair)((DictionaryEntry)e.Item.DataItem).Value;
 
                     var t = (TextBox)e.Item.FindControl("txtValue");
                     var d = (TextBox)e.Item.FindControl("txtDefault");
@@ -1015,7 +1014,7 @@ namespace DotNetNuke.Modules.Admin.Languages
                     }
                     if (length > 30)
                     {
-                        int height = 18*(length/30);
+                        int height = 18 * (length / 30);
                         if (height > 108)
                         {
                             height = 108;

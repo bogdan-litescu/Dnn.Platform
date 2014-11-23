@@ -1,7 +1,7 @@
 ﻿#region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -19,14 +19,12 @@
 // DEALINGS IN THE SOFTWARE.
 #endregion
 
-using System;
-
 namespace DotNetNuke.ExtensionPoints
 {
     public interface IMenuItemExtensionPoint : IExtensionPoint
     {
         string Value { get; }
+
         string CssClass { get; }
-        bool EnabledOnHost { get; }
     }
 }

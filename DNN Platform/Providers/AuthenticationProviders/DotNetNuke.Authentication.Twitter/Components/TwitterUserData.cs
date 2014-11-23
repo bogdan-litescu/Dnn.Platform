@@ -2,7 +2,7 @@
 
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -63,15 +63,15 @@ namespace DotNetNuke.Authentication.Twitter.Components
         #endregion
 
         [DataMember(Name = "screen_name")]
-        private string ScreenName { get; set; }
+        public string ScreenName { get; set; }
 
         [DataMember(Name = "lang")]
-        private string LanguageCode { get; set; }
+        public string LanguageCode { get; set; }
 
         [DataMember(Name = "profile_image_url")]
-        private string ProfileImageUrl { get; set; }
+        public string ProfileImageUrl { get; set; }
 
         [DataMember(Name = "url")]
-        private string Url { get; set; }
+        public string Url { get; set; }
     }
 }

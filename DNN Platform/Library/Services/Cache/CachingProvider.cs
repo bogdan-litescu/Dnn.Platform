@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -191,6 +191,11 @@ namespace DotNetNuke.Services.Cache
             RemoveCacheKey(DataCache.DesktopModulePermissionCacheKey, clearRuntime);
             RemoveCacheKey("GetRoles", clearRuntime);
             RemoveCacheKey("CompressionConfig", clearRuntime);
+            RemoveCacheKey(DataCache.SubscriptionTypesCacheKey, clearRuntime);
+            RemoveCacheKey(DataCache.PackageTypesCacheKey, clearRuntime);
+            RemoveCacheKey(DataCache.PermissionsCacheKey, clearRuntime);
+            RemoveCacheKey(DataCache.ContentTypesCacheKey, clearRuntime);
+            RemoveCacheKey(DataCache.JavaScriptLibrariesCacheKey, clearRuntime);
 
             //Clear "portal keys" for Host
             ClearFolderCacheInternal(-1, clearRuntime);
@@ -208,8 +213,7 @@ namespace DotNetNuke.Services.Cache
 
         private void ClearModulePermissionsCachesByPortalInternal(int portalId, bool clearRuntime)
         {
-            var objTabs = new TabController();
-            foreach (KeyValuePair<int, TabInfo> tabPair in objTabs.GetTabsByPortal(portalId))
+            foreach (KeyValuePair<int, TabInfo> tabPair in TabController.Instance.GetTabsByPortal(portalId))
             {
                 RemoveFormattedCacheKey(DataCache.ModulePermissionCacheKey, clearRuntime, tabPair.Value.TabID);
             }
@@ -235,13 +239,11 @@ namespace DotNetNuke.Services.Cache
             }
             if (cascade)
             {
-                var objTabs = new TabController();
-                foreach (KeyValuePair<int, TabInfo> tabPair in objTabs.GetTabsByPortal(portalId))
+                foreach (KeyValuePair<int, TabInfo> tabPair in TabController.Instance.GetTabsByPortal(portalId))
                 {
                     ClearModuleCacheInternal(tabPair.Value.TabID, clearRuntime);
                 }
-                var moduleController = new ModuleController();
-                foreach (ModuleInfo moduleInfo in moduleController.GetModules(portalId))
+                foreach (ModuleInfo moduleInfo in ModuleController.Instance.GetModules(portalId))
                 {
                     RemoveCacheKey("GetModuleSettings" + moduleInfo.ModuleID, clearRuntime);
                 }
@@ -254,6 +256,7 @@ namespace DotNetNuke.Services.Cache
             ClearTabCacheInternal(portalId, clearRuntime);
 
             RemoveCacheKey(String.Format(DataCache.RolesCacheKey, portalId), clearRuntime);
+            RemoveCacheKey(String.Format(DataCache.JournalTypesCacheKey, portalId), clearRuntime);
         }
 
         private void ClearTabCacheInternal(int portalId, bool clearRuntime)
@@ -279,6 +282,7 @@ namespace DotNetNuke.Services.Cache
             }
 
             RemoveCacheKey(string.Format(DataCache.TabPathCacheKey, Null.NullString, portalId), clearRuntime);
+            RemoveCacheKey(string.Format(DataCache.TabSettingsCacheKey, portalId), clearRuntime);
         }
 
         private void RemoveCacheKey(string CacheKey, bool clearRuntime)

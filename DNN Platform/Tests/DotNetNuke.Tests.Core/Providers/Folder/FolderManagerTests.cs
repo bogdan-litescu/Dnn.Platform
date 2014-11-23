@@ -1,7 +1,7 @@
 ﻿#region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -32,6 +32,7 @@ using DotNetNuke.Services.Cache;
 using DotNetNuke.Services.FileSystem;
 using DotNetNuke.Services.FileSystem.Internal;
 using DotNetNuke.Services.Log.EventLog;
+using DotNetNuke.Tests.Core.Providers.Builders;
 using DotNetNuke.Tests.Utilities;
 using DotNetNuke.Tests.Utilities.Mocks;
 
@@ -58,8 +59,10 @@ namespace DotNetNuke.Tests.Core.Providers.Folder
 	    private Mock<IFile> _file;
         private Mock<ICBO> _cbo;
         private Mock<IPathUtils> _pathUtils;
+        private Mock<IUserSecurityController> _mockUserSecurityController;
+        private Mock<IFileDeletionController> _mockFileDeletionController;
 
-        #endregion
+            #endregion
 
         #region Setup & TearDown
 
@@ -74,23 +77,33 @@ namespace DotNetNuke.Tests.Core.Providers.Folder
 			_file = new Mock<IFile>();
             _cbo = new Mock<ICBO>();
             _pathUtils = new Mock<IPathUtils>();
+            _mockUserSecurityController = new Mock<IUserSecurityController>();
+            _mockFileDeletionController = new Mock<IFileDeletionController>();
 
             FolderMappingController.RegisterInstance(_folderMappingController.Object);
             DirectoryWrapper.RegisterInstance(_directory.Object);
 			FileWrapper.RegisterInstance(_file.Object);
-            CBOWrapper.RegisterInstance(_cbo.Object);
+            CBO.SetTestableInstance(_cbo.Object);
             PathUtils.RegisterInstance(_pathUtils.Object);
+            UserSecurityController.SetTestableInstance(_mockUserSecurityController.Object);
+            FileDeletionController.SetTestableInstance(_mockFileDeletionController.Object);
 
             _mockFolderManager = new Mock<FolderManager> { CallBase = true };
 
             _folderManager = new FolderManager();
 
             _folderInfo = new Mock<IFolderInfo>();
+
         }
 
         [TearDown]
         public void TearDown()
         {
+            UserSecurityController.ClearInstance();
+            FileLockingController.ClearInstance();
+            MockComponentProvider.ResetContainer();
+            CBO.ClearInstance();
+            FileDeletionController.ClearInstance();
             MockComponentProvider.ResetContainer();
         }
 
@@ -198,6 +211,185 @@ namespace DotNetNuke.Tests.Core.Providers.Folder
         public void DeleteFolder_Throws_On_Null_Folder()
         {
             _folderManager.DeleteFolder(null);
+        }
+
+        [Test]
+        [ExpectedException(typeof(ArgumentNullException))]
+        public void DeleteFolder_Throws_OnNullFolder_WhenRecursive()
+        {
+            //Arrange
+            var folderMapping = new FolderMappingInfo { FolderProviderType = Constants.FOLDER_ValidFolderProviderType };
+            _folderMappingController.Setup(fmc => fmc.GetFolderMapping(Constants.FOLDER_ValidFolderMappingID)).Returns(folderMapping);
+
+            //Act
+            var notDeletedSubfolders = new List<IFolderInfo>();
+            _folderManager.DeleteFolder(null, notDeletedSubfolders);
+        }
+
+        [Test]
+        public void DeleteFolder_CallsFolderProviderDeleteFolder_WhenRecursive()
+        {
+            //Arrange
+            var folderInfo = new FolderInfoBuilder()
+                .WithPhysicalPath(Constants.FOLDER_ValidFolderPath)
+                .Build();
+
+            var folderMapping = new FolderMappingInfo { FolderProviderType = Constants.FOLDER_ValidFolderProviderType };
+            _folderMappingController.Setup(fmc => fmc.GetFolderMapping(Constants.CONTENT_ValidPortalId, Constants.FOLDER_ValidFolderMappingID)).Returns(folderMapping);
+            _folderMappingController.Setup(fmc => fmc.GetFolderMapping(Constants.FOLDER_ValidFolderMappingID)).Returns(folderMapping);
+
+            _mockFolder.Setup(mf => mf.DeleteFolder(folderInfo)).Verifiable();
+
+            _mockFolderManager.Setup(mfm => mfm.DeleteFolder(Constants.CONTENT_ValidPortalId, Constants.FOLDER_ValidFolderRelativePath));
+            _mockFolderManager.Setup(mfm => mfm.GetFolders(folderInfo)).Returns(new List<IFolderInfo>());
+            _mockFolderManager.Setup(mfm => mfm.GetFiles(folderInfo, It.IsAny<bool>(), It.IsAny<bool>())).Returns(new List<IFileInfo>());
+
+            _mockUserSecurityController.Setup(musc => musc.HasFolderPermission(folderInfo, "DELETE")).Returns(true);
+
+            //Act
+            var subfoldersNotDeleted = new List<IFolderInfo>();
+            _mockFolderManager.Object.DeleteFolder(folderInfo, subfoldersNotDeleted);
+
+            //Assert
+            _mockFolder.Verify();
+            Assert.AreEqual(0, subfoldersNotDeleted.Count);
+        }
+
+        [Test]
+        public void DeleteFolder_CallsFolderProviderDeleteFolder_WhenRecursive_WhenExistSubfolders()
+        {
+            //Arrange
+            var folderInfo = new FolderInfoBuilder()
+                .WithFolderId(1)
+                .WithPhysicalPath(Constants.FOLDER_ValidFolderPath)
+                .Build();
+
+            var subfolder1 = new FolderInfoBuilder()
+                .WithFolderId(2)
+                .WithPhysicalPath(Constants.FOLDER_ValidFolderPath+"\\subfolder1")
+                .Build();
+            var subfolder2 = new FolderInfoBuilder()
+                .WithFolderId(3)
+                .WithPhysicalPath(Constants.FOLDER_ValidFolderPath + "\\subfolder2")
+                .Build();
+            var subfolders = new List<IFolderInfo>
+                {
+                    subfolder1,
+                    subfolder2
+                };
+
+            var folderMapping = new FolderMappingInfo { FolderProviderType = Constants.FOLDER_ValidFolderProviderType };
+            _folderMappingController.Setup(fmc => fmc.GetFolderMapping(Constants.CONTENT_ValidPortalId, Constants.FOLDER_ValidFolderMappingID)).Returns(folderMapping);
+            _folderMappingController.Setup(fmc => fmc.GetFolderMapping(Constants.FOLDER_ValidFolderMappingID)).Returns(folderMapping);
+
+            _mockFolder.Setup(mf => mf.DeleteFolder(folderInfo)).Verifiable();
+            _mockFolder.Setup(mf => mf.DeleteFolder(subfolder1)).Verifiable();
+            _mockFolder.Setup(mf => mf.DeleteFolder(subfolder2)).Verifiable();
+
+            _mockFolderManager.Setup(mfm => mfm.DeleteFolder(Constants.CONTENT_ValidPortalId, Constants.FOLDER_ValidFolderRelativePath));
+            _mockFolderManager.Setup(mfm => mfm.GetFolders(folderInfo)).Returns(subfolders);
+            _mockFolderManager.Setup(mfm => mfm.GetFolders(It.IsNotIn(folderInfo))).Returns(new List<IFolderInfo>());
+
+            _mockFolderManager.Setup(mfm => mfm.GetFiles(It.IsAny<IFolderInfo>(), It.IsAny<bool>(), It.IsAny<bool>())).Returns(new List<IFileInfo>());
+
+            _mockUserSecurityController.Setup(musc => musc.HasFolderPermission(It.IsAny<IFolderInfo>(), "DELETE")).Returns(true);
+
+            //Act
+            var subfoldersNotDeleted = new List<IFolderInfo>();
+            _mockFolderManager.Object.DeleteFolder(folderInfo, subfoldersNotDeleted);
+
+            //Assert
+            _mockFolder.Verify();
+            Assert.AreEqual(0, subfoldersNotDeleted.Count);
+        }
+
+        [Test]
+        public void DeleteFolder_SubFoldersCollectionIsNotEmpty_WhenRecursive_WhenUserHasNotDeletePermission()
+        {
+            //Arrange
+            var folderInfo = new FolderInfoBuilder()
+                .WithFolderId(1)
+                .WithPhysicalPath(Constants.FOLDER_ValidFolderPath)
+                .Build();
+
+            var subfolder1 = new FolderInfoBuilder()
+                .WithFolderId(2)
+                .WithPhysicalPath(Constants.FOLDER_ValidFolderPath + "\\subfolder1")
+                .Build();
+            var subfolder2 = new FolderInfoBuilder()
+                .WithFolderId(3)
+                .WithPhysicalPath(Constants.FOLDER_ValidFolderPath + "\\subfolder2")
+                .Build();
+            var subfolders = new List<IFolderInfo>
+                {
+                    subfolder1,
+                    subfolder2
+                };
+
+            var folderMapping = new FolderMappingInfo { FolderProviderType = Constants.FOLDER_ValidFolderProviderType };
+            _folderMappingController.Setup(fmc => fmc.GetFolderMapping(Constants.CONTENT_ValidPortalId, Constants.FOLDER_ValidFolderMappingID)).Returns(folderMapping);
+            _folderMappingController.Setup(fmc => fmc.GetFolderMapping(Constants.FOLDER_ValidFolderMappingID)).Returns(folderMapping);
+
+            _mockFolder.Setup(mf => mf.DeleteFolder(subfolder1));
+            
+            _mockFolderManager.Setup(mfm => mfm.DeleteFolder(Constants.CONTENT_ValidPortalId, Constants.FOLDER_ValidFolderRelativePath));
+            _mockFolderManager.Setup(mfm => mfm.GetFolders(folderInfo)).Returns(subfolders);
+            _mockFolderManager.Setup(mfm => mfm.GetFolders(It.IsNotIn(folderInfo))).Returns(new List<IFolderInfo>());
+
+            _mockFolderManager.Setup(mfm => mfm.GetFiles(It.IsAny<IFolderInfo>(), It.IsAny<bool>(), It.IsAny<bool>())).Returns(new List<IFileInfo>());
+
+            _mockUserSecurityController.Setup(musc => musc.HasFolderPermission(subfolder2, "DELETE")).Returns(false);
+            _mockUserSecurityController.Setup(musc => musc.HasFolderPermission(It.IsNotIn(subfolder2), "DELETE")).Returns(true);
+
+            //Act
+            var subfoldersNotDeleted = new List<IFolderInfo>();
+            _mockFolderManager.Object.DeleteFolder(folderInfo, subfoldersNotDeleted);
+
+            //Assert
+            Assert.AreEqual(2, subfoldersNotDeleted.Count); //folderInfo and subfolder2 are not deleted
+        }
+
+        [Test]
+        [ExpectedException(typeof(FileLockedException))]
+        public void DeleteFolder_Throws_OnFileDeletionControllerThrows_WhenRecursive_WhenFileIsLocked()
+        {
+            //Arrange
+            var folderInfo = new FolderInfoBuilder()
+                .WithFolderId(1)
+                .WithPhysicalPath(Constants.FOLDER_ValidFolderPath)
+                .Build();
+
+            var fileInfo1 = new FileInfoBuilder()
+                .WithFileId(1)
+                .Build();
+            var fileInfo2 = new FileInfoBuilder()
+                .WithFileId(2)
+                .Build();
+            var files = new List<IFileInfo>
+                {
+                    fileInfo1,
+                    fileInfo2
+                };
+
+            var folderMapping = new FolderMappingInfo { FolderProviderType = Constants.FOLDER_ValidFolderProviderType };
+            _folderMappingController.Setup(fmc => fmc.GetFolderMapping(Constants.CONTENT_ValidPortalId, Constants.FOLDER_ValidFolderMappingID)).Returns(folderMapping);
+            _folderMappingController.Setup(fmc => fmc.GetFolderMapping(Constants.FOLDER_ValidFolderMappingID)).Returns(folderMapping);
+
+            //_mockFolder.Setup(mf => mf.DeleteFolder(folderInfo));
+
+            _mockFolderManager.Setup(mfm => mfm.DeleteFolder(Constants.CONTENT_ValidPortalId, Constants.FOLDER_ValidFolderRelativePath));
+            _mockFolderManager.Setup(mfm => mfm.GetFolders(folderInfo)).Returns(new List<IFolderInfo>());
+            
+            _mockFolderManager.Setup(mfm => mfm.GetFiles(folderInfo, It.IsAny<bool>(), It.IsAny<bool>())).Returns(files);
+
+            _mockUserSecurityController.Setup(musc => musc.HasFolderPermission(It.IsAny<IFolderInfo>(), "DELETE")).Returns(true);
+
+            _mockFileDeletionController.Setup(mfdc => mfdc.DeleteFile(fileInfo1));
+            _mockFileDeletionController.Setup(mfdc => mfdc.DeleteFile(fileInfo2)).Throws<FileLockedException>();
+
+
+            //Act
+            _mockFolderManager.Object.DeleteFolder(folderInfo, new List<IFolderInfo>());
         }
 
         [Test]
@@ -592,7 +784,7 @@ namespace DotNetNuke.Tests.Core.Providers.Folder
         {
             var folders = new List<FolderInfo>();
 
-            _cbo.Setup(cbo => cbo.GetCachedObject<List<FolderInfo>>(It.IsAny<CacheItemArgs>(), It.IsAny<CacheItemExpiredCallback>())).Returns(folders).Verifiable();
+            _cbo.Setup(cbo => cbo.GetCachedObject<List<FolderInfo>>(It.IsAny<CacheItemArgs>(), It.IsAny<CacheItemExpiredCallback>(), false)).Returns(folders).Verifiable();
 
             _mockFolderManager.Object.GetFolders(Constants.CONTENT_ValidPortalId);
 

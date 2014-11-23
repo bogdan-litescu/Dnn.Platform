@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -22,7 +22,7 @@
 
 using System;
 using System.Web.UI.WebControls;
-
+using System.Xml;
 using DotNetNuke.Common.Utilities;
 using DotNetNuke.Entities.Modules;
 using DotNetNuke.Entities.Urls.Config;
@@ -133,9 +133,9 @@ namespace DotNetNuke.Modules.Admin.Host
                 var config = new RewriterConfiguration();
 
                 //Deserialize into RewriterConfiguration
-#pragma warning disable 612,618
-                config = (RewriterConfiguration) XmlUtils.Deserialize(Convert.ToString(myState[1]), config.GetType());
-#pragma warning restore 612,618
+	            var xmlDocument = new XmlDocument();
+				xmlDocument.LoadXml(Convert.ToString(myState[1]));
+				config = CBO.DeserializeObject<RewriterConfiguration>(xmlDocument);
                 Rules = config.Rules;
             }
         }

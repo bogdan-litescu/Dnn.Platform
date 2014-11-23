@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Specialized;
+﻿using System.Collections.Specialized;
 using System.Web.UI;
 using System.Web.UI.WebControls;
 
@@ -42,9 +41,7 @@ namespace DotNetNuke.Web.UI.WebControls
 
         protected override object SaveViewState()
         {
-            // The _typedValue can be a composite class.  To ensure that all the chnaged properties of
-            // this class are serialized we need to call the SerializeValue method.
-            SerializeValue();
+            EnsureValue();
             return base.SaveViewState();
         }
 
@@ -56,12 +53,12 @@ namespace DotNetNuke.Web.UI.WebControls
 
         protected override bool LoadPostData(string postDataKey, NameValueCollection postCollection)
         {
-            var stateChanged = base.LoadPostData(postDataKey, postCollection);
-            if (stateChanged)
+            var controlsStateChanged = base.LoadPostData(postDataKey, postCollection);
+            if (controlsStateChanged)
             {
                 SetTypedValue();
             }
-            return stateChanged;
+            return controlsStateChanged;
         }
 
         private void SetTypedValue()
@@ -85,9 +82,7 @@ namespace DotNetNuke.Web.UI.WebControls
 
         protected override void TrackViewState()
         {
-            // The _typedValue can be a composite class.  To ensure that all the chnaged properties of
-            // this class are serialized we need to call the SerializeValue method.
-            SerializeValue();
+            EnsureValue();
             base.TrackViewState();
         }
 

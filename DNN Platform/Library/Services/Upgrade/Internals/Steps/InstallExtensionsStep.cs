@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -45,65 +45,35 @@ namespace DotNetNuke.Services.Upgrade.InternalController.Steps
         /// </summary>        
         public override void Execute()
         {
+            var packages = Upgrade.GetInstallPackages();
+            if (packages.Count == 0)
+            {
+                Percentage = 100;
+                Status = StepStatus.Done;
+                return;
+            }
+
             Percentage = 0;
             Status = StepStatus.Running;
 
-            var extensions = new string[] { "Module", "Skin", "Container", "Language", "Provider", "AuthSystem", "Package" };
-            var percentForEachStep = 100 / extensions.Length;
+            var percentForEachStep = 100 / packages.Count;
             var counter = 0;
-
-            foreach (var extension in extensions)
+            foreach (var package in packages)
             {
-                try
+                var file = package.Key;
+                var packageType = package.Value.PackageType;
+                var message = string.Format(Localization.Localization.GetString("InstallingExtension", LocalInstallResourceFile), packageType, Path.GetFileName(file));
+                Details = message;
+                Logger.Trace(Details);
+                var success = Upgrade.InstallPackage(file, packageType, false);
+                if (!success)
                 {
-                    InstallPackages(extension);
-                    Percentage = percentForEachStep * counter++;
+                    Errors.Add(message);
+                    break;
                 }
-
-                catch (Exception ex)
-                {
-                    Errors.Add(Localization.Localization.GetString("InstallingExtensionType", LocalInstallResourceFile) + ": " + ex.Message);
-                }
+                Percentage = percentForEachStep * counter++;
             }
-
 			Status = Errors.Count > 0 ? StepStatus.Retry : StepStatus.Done;
-        }
-
-        #endregion
-
-        #region private methods
-
-        private void InstallPackages(string packageType)
-        {
-
-            Details = string.Format(Localization.Localization.GetString("InstallingExtensionType", LocalInstallResourceFile), packageType);
-            Logger.Trace(Details);
-            var installPackagePath = Globals.ApplicationMapPath + "\\Install\\" + packageType;
-            if (Directory.Exists(installPackagePath))
-            {
-                var files = Directory.GetFiles(installPackagePath);
-                if (files.Length > 0)
-                {
-                    var percentForEachStep = 100/files.Length;
-                    var counter = 0;
-                    foreach (string file in files)
-                    {
-                        if (Path.GetExtension(file.ToLower()) == ".zip")
-                        {
-	                        var message = string.Format(Localization.Localization.GetString("InstallingExtension", LocalInstallResourceFile), packageType, Path.GetFileName(file));
-                            Details = message;
-                            Logger.Trace(Details);
-                            var success = Upgrade.InstallPackage(file, packageType, false);
-							if (!success)
-							{
-								Errors.Add(message);
-								break;
-							}
-                        }
-                        Percentage = percentForEachStep * counter++;
-                    }
-                }
-            }
         }
 
         #endregion

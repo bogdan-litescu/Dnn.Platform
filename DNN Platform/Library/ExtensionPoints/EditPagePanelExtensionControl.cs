@@ -1,7 +1,7 @@
 ﻿#region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -49,13 +49,19 @@ namespace DotNetNuke.ExtensionPoints
             if (!String.IsNullOrEmpty(Name))
             {
                 var extension = extensionPointManager.GetEditPagePanelExtensionPointFirstByPriority(Module, Name);
-                LoadControl(extension);
+                if (extension != null)
+                {
+                    LoadControl(extension);                    
+                }
             }
             else
             {
                 foreach (var extension in extensionPointManager.GetEditPagePanelExtensionPoints(Module, Group))
                 {
-                    LoadControl(extension);
+                    if (extension != null)
+                    {
+                        LoadControl(extension);                        
+                    }
                 }
             }
         }

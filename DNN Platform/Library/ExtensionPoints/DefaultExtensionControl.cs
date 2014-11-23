@@ -1,7 +1,7 @@
 ﻿#region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -19,14 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 #endregion
 
-using System;
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Linq;
-using System.Text;
-using System.Web;
 using System.Web.UI;
 using System.Web.UI.WebControls;
+using DotNetNuke.UI.Modules;
 
 namespace DotNetNuke.ExtensionPoints
 {
@@ -40,8 +36,8 @@ namespace DotNetNuke.ExtensionPoints
         {
             get
             {
-                String s = (String)ViewState["Module"];
-                return ((s == null) ? String.Empty : s);
+                var s = (string)ViewState["Module"];
+                return s ?? string.Empty;
             }
             set
             {
@@ -55,8 +51,8 @@ namespace DotNetNuke.ExtensionPoints
         {
             get
             {
-                String s = (String)ViewState["Group"];
-                return ((s == null) ? String.Empty : s);
+                var s = (string)ViewState["Group"];
+                return s ?? string.Empty;
             }
             set
             {
@@ -70,13 +66,15 @@ namespace DotNetNuke.ExtensionPoints
         {
             get
             {
-                String s = (String)ViewState["Name"];
-                return ((s == null) ? String.Empty : s);
+                var s = (string)ViewState["Name"];
+                return s ?? string.Empty;
             }
             set
             {
                 ViewState["Name"] = value;
             }
         }
+
+        public ModuleInstanceContext ModuleContext { get; set; }
     }
 }

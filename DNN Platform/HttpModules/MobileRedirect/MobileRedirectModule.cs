@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -76,7 +76,7 @@ namespace DotNetNuke.HttpModules
         public void OnBeginRequest(object s, EventArgs e)
         {
             var app = (HttpApplication)s;
-            var portalSettings = PortalController.GetCurrentPortalSettings();
+            var portalSettings = PortalController.Instance.GetCurrentPortalSettings();
             
             //First check if we are upgrading/installing
             if (app.Request.Url.LocalPath.ToLower().EndsWith("install.aspx")
@@ -140,13 +140,13 @@ namespace DotNetNuke.HttpModules
 				tabPath = tabPath.Substring(0, tabPath.IndexOf("?"));
 			}
 
-			var portalSettings = PortalController.GetCurrentPortalSettings();
+			var portalSettings = PortalController.Instance.GetCurrentPortalSettings();
 			if (portalSettings == null)
 			{
 				return true;
 			}
 
-			var alias = PortalController.GetCurrentPortalSettings().PortalAlias.HTTPAlias.ToLowerInvariant();
+			var alias = PortalController.Instance.GetCurrentPortalSettings().PortalAlias.HTTPAlias.ToLowerInvariant();
 			if (alias.Contains("/"))
 			{
 				tabPath = tabPath.Replace(alias.Substring(alias.IndexOf("/")), string.Empty);

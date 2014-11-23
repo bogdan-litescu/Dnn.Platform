@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -32,10 +32,12 @@ using System.Web.UI.HtmlControls;
 using System.Web.UI.WebControls;
 
 using DotNetNuke.Common;
+using DotNetNuke.Common.Utilities;
 using DotNetNuke.Entities.Host;
 using DotNetNuke.Entities.Icons;
 using DotNetNuke.Entities.Portals;
 using DotNetNuke.Entities.Users;
+using DotNetNuke.Framework.JavaScriptLibraries;
 using DotNetNuke.Instrumentation;
 using DotNetNuke.Services.Exceptions;
 using DotNetNuke.Services.Localization;
@@ -135,7 +137,7 @@ namespace DotNetNuke.Framework
         {
             get
             {
-                return PortalController.GetCurrentPortalSettings();
+                return PortalController.Instance.GetCurrentPortalSettings();
             }
         }
 
@@ -189,7 +191,7 @@ namespace DotNetNuke.Framework
             }
             else
             {
-                url += (url.IndexOf("?", StringComparison.Ordinal) == -1 ? "?" : "&") + "error=" + (exc == null || UserController.GetCurrentUserInfo() == null || !UserController.GetCurrentUserInfo().IsSuperUser ? "An unexpected error has occurred" : Server.UrlEncode(exc.Message));
+                url += (url.IndexOf("?", StringComparison.Ordinal) == -1 ? "?" : "&") + "error=" + (exc == null || UserController.Instance.GetCurrentUserInfo() == null || !UserController.Instance.GetCurrentUserInfo().IsSuperUser ? "An unexpected error has occurred" : Server.UrlEncode(exc.Message));
                 if (!Globals.IsAdminControl() && hideContent)
                 {
                     url += "&content=0";
@@ -210,6 +212,24 @@ namespace DotNetNuke.Framework
             {
                 ProcessControl(c, affectedControls, true, resourceFileRoot);
             }
+        }
+
+        private void Handle404Exception()
+        {
+            if (PortalSettings.ErrorPage404 > Null.NullInteger)
+            {
+                Response.Redirect(Globals.NavigateURL(PortalSettings.ErrorPage404, string.Empty, "status=404"));
+            }
+            else
+            {
+                Response.ClearContent();
+                Response.TrySkipIisCustomErrors = true;
+                Response.StatusCode = 404;
+                Response.Status = "404 Not Found";
+                Response.Write("404 Not Found");
+                Response.End();
+            }
+            
         }
 
         #endregion
@@ -233,6 +253,13 @@ namespace DotNetNuke.Framework
             string strURL = Globals.ApplicationURL();
             if (exc is HttpException && !IsViewStateFailure(exc))
             {
+                //if the exception's status code set to 404, we need display 404 page if defined or show no found info.
+                var statusCode = (exc as HttpException).GetHttpCode();
+                if (statusCode == 404)
+                {
+                    Handle404Exception();
+                }
+
                 if (PortalSettings.ErrorPage500 != -1)
                 {
                     string url = GetErrorUrl("~/Default.aspx?tabid=" + PortalSettings.ErrorPage500, exc, false);
@@ -257,7 +284,10 @@ namespace DotNetNuke.Framework
                 Localization.SetThreadCultures(PageCulture, PortalSettings);
             }
 
-			AJAX.AddScriptManager(this, !isInstallPage);
+            if (ScriptManager.GetCurrent(this) == null)
+            {
+                AJAX.AddScriptManager(this, !isInstallPage);
+            }
 
             var dnncoreFilePath = HttpContext.Current.IsDebuggingEnabled
                    ? "~/js/Debug/dnncore.js"
@@ -276,22 +306,24 @@ namespace DotNetNuke.Framework
             //Modules can override the standard behavior by including their own script on the page.
             //The module must register the script with the "jQuery" key and should notify user
             //of potential version conflicts with core jQuery support.
-            if (jQuery.IsRequested)
-            {
-                jQuery.RegisterJQuery(Page);
-            }
-            if (jQuery.IsUIRequested)
-            {
-                jQuery.RegisterJQueryUI(Page);
-            }
-            if (jQuery.AreDnnPluginsRequested)
-            {
-                jQuery.RegisterDnnJQueryPlugins(Page);
-            }
-            if (jQuery.IsHoverIntentRequested)
-            {
-                jQuery.RegisterHoverIntent(Page);
-            }
+            //if (jQuery.IsRequested)
+            //{
+            //    jQuery.RegisterJQuery(Page);
+            //}
+            //if (jQuery.IsUIRequested)
+            //{
+            //    jQuery.RegisterJQueryUI(Page);
+            //}
+            //if (jQuery.AreDnnPluginsRequested)
+            //{
+            //    jQuery.RegisterDnnJQueryPlugins(Page);
+            //}
+            //if (jQuery.IsHoverIntentRequested)
+            //{
+            //    jQuery.RegisterHoverIntent(Page);
+            //}
+
+            JavaScript.Register(Page);
 
             if(ServicesFrameworkInternal.Instance.IsAjaxAntiForgerySupportRequired)
             {
@@ -439,6 +471,14 @@ namespace DotNetNuke.Framework
                         button.Text = value;
                     }
                 }
+                if (control is HtmlButton)
+                {
+                    var button = (HtmlButton)control;
+                    if (!String.IsNullOrEmpty(value))
+                    {
+                        button.Attributes["Title"] = value;
+                    }
+                }
                 if (control is HtmlImage)
                 {
                     var htmlImage = (HtmlImage)control;
@@ -472,6 +512,15 @@ namespace DotNetNuke.Framework
                         image.ToolTip = value;
                     }
                 }
+                if (control is TextBox)
+                {
+                    var textBox = (TextBox)control;
+                    if (!String.IsNullOrEmpty(value))
+                    {
+                        textBox.ToolTip = value;
+                    }
+                } 
+
             }
 
             //Translate listcontrol items here 

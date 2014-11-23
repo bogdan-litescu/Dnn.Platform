@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -127,6 +127,10 @@ namespace DotNetNuke.Services.Log.EventLog
                 {
                     obj.LogUserID = Convert.ToInt32(dr["LogUserID"]);
                 }
+                if (dr["LogEventID"] != DBNull.Value)
+                {
+                    obj.LogEventID = Convert.ToInt32(dr["LogEventID"]);
+                }
                 obj.LogTypeKey = Convert.ToString(dr["LogTypeKey"]);
                 obj.LogUserName = Convert.ToString(dr["LogUserName"]);
                 obj.LogConfigID = Convert.ToString(dr["LogConfigID"]);
@@ -213,8 +217,7 @@ namespace DotNetNuke.Services.Log.EventLog
                             if (logTypeConfigInfo.NotificationThreshold == 0)
                             {
                                 string str = logQueueItem.LogInfo.Serialize();
-    
-                                Mail.Mail.SendEmail(logTypeConfigInfo.MailFromAddress, logTypeConfigInfo.MailToAddress, "Event Notification", str);
+                                Mail.Mail.SendEmail(logTypeConfigInfo.MailFromAddress, logTypeConfigInfo.MailToAddress, "Event Notification", string.Format("<pre>{0}</pre>", HttpUtility.HtmlEncode(str)));
                             }
                         }
                         finally
@@ -361,7 +364,7 @@ namespace DotNetNuke.Services.Log.EventLog
 
         public override LogTypeConfigInfo GetLogTypeConfigInfoByID(string id)
         {
-            return (LogTypeConfigInfo) CBO.FillObject(DataProvider.Instance().GetLogTypeConfigInfoByID(Convert.ToInt32(id)), typeof (LogTypeConfigInfo));
+            return CBO.FillObject<LogTypeConfigInfo>(DataProvider.Instance().GetLogTypeConfigInfoByID(Convert.ToInt32(id)));
         }
 
         public override ArrayList GetLogTypeInfo()
@@ -455,7 +458,7 @@ namespace DotNetNuke.Services.Log.EventLog
                 {
                     CBO.CloseDataReader(dr, true);
                 }
-                Mail.Mail.SendEmail(typeConfigInfo.MailFromAddress, typeConfigInfo.MailToAddress, "Event Notification", log);
+                Mail.Mail.SendEmail(typeConfigInfo.MailFromAddress, typeConfigInfo.MailToAddress, "Event Notification", string.Format("<pre>{0}</pre>", HttpUtility.HtmlEncode(log)));
                 DataProvider.Instance().UpdateEventLogPendingNotif(Convert.ToInt32(typeConfigInfo.ID));
             }
         }

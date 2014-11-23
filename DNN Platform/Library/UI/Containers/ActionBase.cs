@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -147,17 +147,7 @@ namespace DotNetNuke.UI.Containers
         {
             get
             {
-                PortalSettings _settings = ModuleControl.ModuleContext.PortalSettings;
-                //following If clase left to preserve backwards compatibility
-                //liable to be removed if related obsolete variable gets removed
-                if (!_settings.ActiveTab.IsSuperTab)
-                {
-//still maintaining an obsolete type in public interface to maintain binary compatibility
-#pragma warning disable 612,618
-                    m_tabPreview = (_settings.UserMode == PortalSettings.Mode.View);
-#pragma warning restore 612,618
-                }
-                return _settings;
+                return ModuleControl.ModuleContext.PortalSettings;
             }
         }
 		
@@ -321,6 +311,11 @@ namespace DotNetNuke.UI.Containers
         {
             try
             {
+                if (this.ModuleControl == null)
+                {
+                    return;
+                }
+
                 ActionRoot.Actions.AddRange(Actions);
             }
             catch (Exception exc)

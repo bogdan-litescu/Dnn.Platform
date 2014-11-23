@@ -1,7 +1,7 @@
 ﻿#region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -21,10 +21,12 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Web;
 
 using DotNetNuke.Common;
 using DotNetNuke.Common.Utilities;
@@ -32,31 +34,82 @@ using DotNetNuke.Entities.Icons;
 using DotNetNuke.Entities.Modules;
 using DotNetNuke.Entities.Modules.Actions;
 using DotNetNuke.ExtensionPoints;
+using DotNetNuke.ExtensionPoints.Filters;
 using DotNetNuke.Framework;
+using DotNetNuke.Framework.JavaScriptLibraries;
 using DotNetNuke.Modules.DigitalAssets.Components.Controllers;
 using DotNetNuke.Modules.DigitalAssets.Components.Controllers.Models;
+using DotNetNuke.Modules.DigitalAssets.Services;
 using DotNetNuke.Security;
 using DotNetNuke.Security.Permissions;
 using DotNetNuke.Services.Exceptions;
 using DotNetNuke.Services.FileSystem;
 using DotNetNuke.Services.Localization;
+using DotNetNuke.UI.Skins;
+using DotNetNuke.UI.Skins.Controls;
 using DotNetNuke.Web.Client;
 using DotNetNuke.Web.Client.ClientResourceManagement;
 using DotNetNuke.Web.UI.WebControls;
 
 using Telerik.Web.UI;
-using System.Web;
 
 namespace DotNetNuke.Modules.DigitalAssets
 {
     public partial class View : PortalModuleBase, IActionable
     {
-        private readonly IDigitalAssetsController controller = new DigitalAssetsController();
-        private readonly ExtensionPointManager epm = new ExtensionPointManager();
+        private static readonly DigitalAssetsSettingsRepository SettingsRepository = new DigitalAssetsSettingsRepository();
 
-        private FolderViewModel rootFolderViewModel;
+        private readonly IDigitalAssetsController controller;
+        private readonly ExtensionPointManager epm = new ExtensionPointManager();
+        private NameValueCollection damState;
+
+        public View()
+        {
+            controller = new Factory().DigitalAssetsController;
+        }
+
+        private IExtensionPointFilter Filter
+        {
+            get
+            {
+                return new CompositeFilter()
+                    .And(new FilterByHostMenu(IsHostPortal))
+                    .And(new FilterByUnauthenticated(HttpContext.Current.Request.IsAuthenticated));
+            }
+        }
+
+        private NameValueCollection DAMState
+        {
+            get
+            {
+                if (damState == null)
+                {
+                    var stateCookie = Request.Cookies["damState-" + UserId];
+                    damState = HttpUtility.ParseQueryString(Uri.UnescapeDataString(stateCookie != null ? stateCookie.Value : ""));
+                }
+
+                return damState;
+            }
+        }
 
         #region Protected Properties
+
+        protected int InitialTab
+        {
+            get
+            {
+                return controller.GetInitialTab(Request.Params, DAMState);
+            }
+        }
+
+        protected bool IsHostPortal
+        {
+            get
+            {
+                return IsHostMenu || controller.GetCurrentPortalId(ModuleId) == Null.NullInteger;
+            }
+        }
+
         protected string InvalidCharacters
         {
             get
@@ -73,11 +126,11 @@ namespace DotNetNuke.Modules.DigitalAssets
             }
         }
 
-        protected long MaxUploadSize
+        protected int MaxUploadSize
         {
             get
             {
-                return Config.GetMaxUploadSize();
+                return (int)Config.GetMaxUploadSize();
             }
         }
 
@@ -90,19 +143,29 @@ namespace DotNetNuke.Modules.DigitalAssets
         }
 
         protected IEnumerable<string> DefaultFolderProviderValues
-        {
+        {            
             get
             {
-                return new List<string>
-                    {
-                        FolderMappingController.Instance.GetFolderMapping(controller.CurrentPortalId, "Standard").FolderMappingID.ToString(CultureInfo.InvariantCulture),
-                        FolderMappingController.Instance.GetFolderMapping(controller.CurrentPortalId, "Secure").FolderMappingID.ToString(CultureInfo.InvariantCulture),
-                        FolderMappingController.Instance.GetFolderMapping(controller.CurrentPortalId, "Database").FolderMappingID.ToString(CultureInfo.InvariantCulture)
-                    };
+                return this.controller.GetDefaultFolderProviderValues(this.ModuleId).Select(f => f.FolderMappingID.ToString(CultureInfo.InvariantCulture)).ToList();
             }
         }
 
-        protected string Path { get; private set; }
+        protected string DefaultFolderTypeId
+        {
+            get
+            {
+                var defaultFolderTypeId = controller.GetDefaultFolderTypeId(ModuleId);
+                return defaultFolderTypeId.HasValue ? defaultFolderTypeId.ToString() : "";
+            }
+        }
+
+        protected bool FilteredContent
+        {
+            get
+            {
+                return SettingsRepository.GetSubfolderFilter(ModuleId) != SubfolderFilter.IncludeSubfoldersFolderStructure;
+            }
+        }
 
         protected string PageSize { get; private set; }
 
@@ -124,7 +187,7 @@ namespace DotNetNuke.Modules.DigitalAssets
 
         private void InitializeFolderType()
         {
-            FolderTypeComboBox.DataSource = controller.GetFolderMappings();
+            FolderTypeComboBox.DataSource = controller.GetFolderMappings(ModuleId);
             FolderTypeComboBox.DataBind();
         }
 
@@ -136,41 +199,36 @@ namespace DotNetNuke.Modules.DigitalAssets
             Grid.MasterTableView.PagerStyle.LastPageToolTip = LocalizeString("PagerLastPage.ToolTip");
             Grid.MasterTableView.PagerStyle.PageSizeLabelText = LocalizeString("PagerPageSize.Text");
 
-            foreach (var columnExtension in epm.GetGridColumnExtensionPoints("DigitalAssets", "GridColumns"))
+            foreach (var columnExtension in epm.GetGridColumnExtensionPoints("DigitalAssets", "GridColumns", Filter))
             {
                 var column = new DnnGridBoundColumn
-                                 {
-                                     HeaderText = columnExtension.HeaderText,
-                                     DataField = columnExtension.DataField,
-                                     UniqueName = columnExtension.UniqueName,
-                                     ReadOnly = columnExtension.ReadOnly,
-                                     Reorderable = columnExtension.Reorderable,
-                                     SortExpression = columnExtension.SortExpression
-                                 };
+                                    {
+                                        HeaderText = columnExtension.HeaderText,
+                                        DataField = columnExtension.DataField,
+                                        UniqueName = columnExtension.UniqueName,
+                                        ReadOnly = columnExtension.ReadOnly,
+                                        Reorderable = columnExtension.Reorderable,
+                                        SortExpression = columnExtension.SortExpression,
+                                        HeaderTooltip = columnExtension.HeaderText
+                                    };
                 column.HeaderStyle.Width = columnExtension.HeaderStyleWidth;
 
-                Grid.Columns.AddAt(columnExtension.ColumnAt, column);
-            }
+                var index = Math.Min(columnExtension.ColumnAt, Grid.Columns.Count - 1);
+                Grid.Columns.AddAt(index, column);
+            }            
         }
 
         private void LoadSubfolders(DnnTreeNode node, int folderId, string nextFolderName, out DnnTreeNode nextNode, out int nextFolderId)
         {
             nextNode = null;
             nextFolderId = 0;
-            var folders = controller.GetFolders(folderId);
+            var folders = controller.GetFolders(ModuleId, folderId);
             foreach (var folder in folders)
             {
                 var hasViewPermissions = HasViewPermissions(folder.Permissions);
-                var newNode = new DnnTreeNode
-                {
-                    ExpandMode = folder.HasChildren && hasViewPermissions ? TreeNodeExpandMode.WebService : TreeNodeExpandMode.ClientSide,
-                    Text = folder.FolderName,
-                    ImageUrl = folder.IconUrl,
-                    Value = folder.FolderID.ToString(CultureInfo.InvariantCulture),
-                    Category = folder.FolderMappingID.ToString(CultureInfo.InvariantCulture),                    
-                };
+                var newNode = this.CreateNodeFromFolder(folder);
+                SetupNodeAttributes(newNode, folder.Permissions, folder);
 
-                newNode.Attributes.Add("permissions", folder.Permissions.ToJson());
                 node.Nodes.Add(newNode);
 
                 if (hasViewPermissions && folder.FolderName.Equals(nextFolderName, StringComparison.InvariantCultureIgnoreCase))
@@ -182,23 +240,17 @@ namespace DotNetNuke.Modules.DigitalAssets
             }
         }
 
-        private void InitializeTreeViews()
+        private void InitializeTreeViews(string initialPath)
         {
             var rootFolder = RootFolderViewModel;
-            var rootNode = new DnnTreeNode
-            {
-                ExpandMode = HasViewPermissions(rootFolder.Permissions) ? TreeNodeExpandMode.WebService : TreeNodeExpandMode.ClientSide,
-                Text = rootFolder.FolderName,
-                ImageUrl = rootFolder.IconUrl,
-                Value = rootFolder.FolderID.ToString(CultureInfo.InvariantCulture),
-                Category = rootFolder.FolderMappingID.ToString(CultureInfo.InvariantCulture),
-                Selected = true,
-                Expanded = true
-            };      
+
+            var rootNode = this.CreateNodeFromFolder(rootFolder);
+            rootNode.Selected = true;
+            rootNode.Expanded = true;
 
             var folderId = rootFolder.FolderID;
             var nextNode = rootNode;
-            foreach (var folderName in Path.Split('/'))
+            foreach (var folderName in initialPath.Split('/'))
             {
                 LoadSubfolders(nextNode, folderId, folderName, out nextNode, out folderId);
                 if (nextNode == null)
@@ -212,15 +264,47 @@ namespace DotNetNuke.Modules.DigitalAssets
             {
                 nextNode.Expanded = false;
                 nextNode.Selected = true;
-                rootNode.ExpandMode = TreeNodeExpandMode.ClientSide;
-                rootNode.Selected = false;                    
+                rootNode.Selected = false;
             }
 
-            rootNode.Attributes.Add("permissions", GetPermissionsForRootFolder(rootFolder.Permissions).ToJson());
+            if (rootNode.Nodes.Count == 0)
+            {
+                this.SetExpandable(rootNode, false);                
+            }
+            
+            SetupNodeAttributes(rootNode, GetPermissionsForRootFolder(rootFolder.Permissions), rootFolder);
+
             FolderTreeView.Nodes.Add(rootNode);
             DestinationTreeView.Nodes.Add(rootNode.Clone());
 
             InitializeTreeViewContextMenu();
+        }
+
+        private DnnTreeNode CreateNodeFromFolder(FolderViewModel folder)
+        {
+            var node = new DnnTreeNode
+            {
+                Text = folder.FolderName,
+                ImageUrl = folder.IconUrl,
+                Value = folder.FolderID.ToString(CultureInfo.InvariantCulture),
+                Category = folder.FolderMappingID.ToString(CultureInfo.InvariantCulture),
+            };
+            this.SetExpandable(node, folder.HasChildren && HasViewPermissions(folder.Permissions));
+            return node;
+        }
+
+        private void SetExpandable(DnnTreeNode node, bool expandable)
+        {
+            node.ExpandMode = expandable ? TreeNodeExpandMode.WebService : TreeNodeExpandMode.ClientSide;
+        }
+
+        private void SetupNodeAttributes(DnnTreeNode node, IEnumerable<PermissionViewModel> permissions, FolderViewModel folder)
+        {
+            node.Attributes.Add("permissions", permissions.ToJson());
+            foreach (var attribute in folder.Attributes)
+            {
+                node.Attributes.Add(attribute.Key, attribute.Value.ToJson());
+            }
         }
 
         private void InitializeTreeViewContextMenu()
@@ -231,14 +315,14 @@ namespace DotNetNuke.Modules.DigitalAssets
                     {
                         Text = Localization.GetString("CreateFolder", LocalResourceFile),
                         Value = "NewFolder",
-                        CssClass = "permission_ADD",
+                        CssClass = "permission_ADD disabledIfFiltered",
                         ImageUrl = IconController.IconURL("FolderCreate", "16x16", "Gray")
                     },    
                 new DnnMenuItem
                     {
                         Text = Localization.GetString("RefreshFolder", LocalResourceFile),
                         Value = "RefreshFolder",
-                        CssClass = "permission_READ permission_BROWSE",
+                        CssClass = "permission_BROWSE permission_READ",
                         ImageUrl = IconController.IconURL("FolderRefreshSync", "16x16", "Gray")
                     },    
                 new DnnMenuItem
@@ -261,15 +345,44 @@ namespace DotNetNuke.Modules.DigitalAssets
                         Value = "DeleteFolder",
                         CssClass = "permission_DELETE",
                         ImageUrl = IconController.IconURL("FileDelete", "16x16", "Black")
-                    }, 
+                    },
+                new DnnMenuItem
+                    {
+                        Text = Localization.GetString("UnlinkFolder", LocalResourceFile),
+                        Value = "UnlinkFolder",
+                        CssClass = "permission_DELETE",
+                        ImageUrl = IconController.IconURL("UnLink", "16x16", "Black")
+                    },
                 new DnnMenuItem
                     {
                         Text = Localization.GetString("ViewFolderProperties", LocalResourceFile),
                         Value = "Properties",
-                        CssClass = "permission_READ permission_BROWSE",
+                        CssClass = "permission_READ",
                         ImageUrl = IconController.IconURL("ViewProperties", "16x16", "CtxtMn")
                     },
             });
+            
+            // Dnn Menu Item Extension Point
+            foreach (var menuItem in epm.GetMenuItemExtensionPoints("DigitalAssets", "TreeViewContextMenu", Filter))
+            {
+                MainContextMenu.Items.Add(new DnnMenuItem
+                {
+                    Text = menuItem.Text,
+                    Value = menuItem.Value,
+                    CssClass = menuItem.CssClass,
+                    ImageUrl = menuItem.Icon
+                });
+            }
+        }
+
+        private void InitializeSearchBox()
+        {
+            var extension = epm.GetUserControlExtensionPointFirstByPriority("DigitalAssets", "SearchBoxExtensionPoint");
+            var searchControl = (PortalModuleBase)Page.LoadControl(extension.UserControlSrc);
+            searchControl.ModuleConfiguration = ModuleConfiguration;
+
+            searchControl.ID = searchControl.GetType().BaseType.Name;
+            SearchBoxPanel.Controls.Add(searchControl);
         }
 
         private void InitializeGridContextMenu()
@@ -280,7 +393,7 @@ namespace DotNetNuke.Modules.DigitalAssets
                     {
                         Text = Localization.GetString("Download", LocalResourceFile),
                         Value = "Download",
-                        CssClass = "permission_READ permission_BROWSE",
+                        CssClass = "permission_READ",
                         ImageUrl = IconController.IconURL("FileDownload", "16x16", "Black")
                     },    
                 new DnnMenuItem
@@ -301,7 +414,7 @@ namespace DotNetNuke.Modules.DigitalAssets
                     {
                         Text = Localization.GetString("Move", LocalResourceFile),
                         Value = "Move",
-                        CssClass = "permission_COPY",
+                        CssClass = "permission_COPY disabledIfFiltered",
                         ImageUrl = IconController.IconURL("FileMove", "16x16", "Black")
                     }, 
                 new DnnMenuItem
@@ -313,29 +426,36 @@ namespace DotNetNuke.Modules.DigitalAssets
                     }, 
                 new DnnMenuItem
                     {
-                        Text = Localization.GetString("GetUrl", LocalResourceFile),
-                        Value = "GetUrl",
-                        CssClass = "permission_READ permission_BROWSE singleItem onlyFiles",
-                        ImageUrl = IconController.IconURL("FileLink", "16x16", "Black")
+                        Text = Localization.GetString("Unlink", LocalResourceFile),
+                        Value = "Unlink",
+                        CssClass = "permission_DELETE singleItem onlyFolders",
+                        ImageUrl = IconController.IconURL("UnLink", "16x16", "Black")
                     }, 
                 new DnnMenuItem
                     {
                         Text = Localization.GetString("UnzipFile", LocalResourceFile),
                         Value = "UnzipFile",
-                        CssClass = "permission_READ permission_BROWSE singleItem onlyFiles",
+                        CssClass = "permission_MANAGE singleItem onlyFiles",
                         ImageUrl = IconController.IconURL("Unzip", "16x16", "Gray")
                     },
                 new DnnMenuItem
                     {
                         Text = Localization.GetString("ViewProperties", LocalResourceFile),
                         Value = "Properties",
-                        CssClass = "permission_READ permission_BROWSE singleItem",
+                        CssClass = "permission_READ singleItem",
                         ImageUrl = IconController.IconURL("ViewProperties", "16x16", "CtxtMn")
-                    },                        
+                    }, 
+                new DnnMenuItem
+                    {
+                        Text = Localization.GetString("GetUrl", LocalResourceFile),
+                        Value = "GetUrl",
+                        CssClass = "permission_READ singleItem onlyFiles",
+                        ImageUrl = IconController.IconURL("FileLink", "16x16", "Black")
+                    }
                 });
 
             // Dnn Menu Item Extension Point
-            foreach (var menuItem in epm.GetMenuItemExtensionPoints("DigitalAssets", "GridContextMenu"))
+            foreach (var menuItem in epm.GetMenuItemExtensionPoints("DigitalAssets", "GridContextMenu", Filter))
             {
                 GridMenu.Items.Add(new DnnMenuItem
                                        {
@@ -355,7 +475,7 @@ namespace DotNetNuke.Modules.DigitalAssets
                     {
                         Text = Localization.GetString("CreateFolder", LocalResourceFile),
                         Value = "NewFolder",
-                        CssClass = "permission_ADD",
+                        CssClass = "permission_ADD disabledIfFiltered",
                         ImageUrl = IconController.IconURL("FolderCreate", "16x16", "Gray")
                     },    
                 new DnnMenuItem
@@ -376,7 +496,7 @@ namespace DotNetNuke.Modules.DigitalAssets
                     {
                         Text = Localization.GetString("ViewFolderProperties", LocalResourceFile),
                         Value = "Properties",
-                        CssClass = "permission_READ permission_BROWSE",
+                        CssClass = "permission_READ",
                         ImageUrl = IconController.IconURL("ViewProperties", "16x16", "CtxtMn")
                     },
             });
@@ -410,13 +530,7 @@ namespace DotNetNuke.Modules.DigitalAssets
         }
         #endregion
 
-        protected FolderViewModel RootFolderViewModel
-        {
-            get
-            {
-                return rootFolderViewModel ?? (rootFolderViewModel = controller.GetRootFolder());
-            }
-        }
+        protected FolderViewModel RootFolderViewModel { get; private set; }
 
         protected override void OnLoad(EventArgs e)
         {
@@ -426,28 +540,62 @@ namespace DotNetNuke.Modules.DigitalAssets
 
                 if (IsPostBack) return;
 
-                var stateCookie = Request.Cookies["damState-" + UserId];
-                var state = HttpUtility.ParseQueryString(Uri.UnescapeDataString(stateCookie != null ? stateCookie.Value : ""));
+                switch (SettingsRepository.GetMode(ModuleId))
+                {
+                    case DigitalAssestsMode.Group:
+                        int groupId;
+                        if (string.IsNullOrEmpty(Request["groupId"]) || !int.TryParse(Request["groupId"], out groupId))
+                        {
+                            Skin.AddModuleMessage(this, Localization.GetString("InvalidGroup.Error", LocalResourceFile), ModuleMessage.ModuleMessageType.RedError);
+                            return;
+                        }
+
+                        var groupFolder = controller.GetGroupFolder(groupId, PortalSettings);
+                        if (groupFolder == null)
+                        {
+                            Skin.AddModuleMessage(this, Localization.GetString("InvalidGroup.Error", LocalResourceFile), ModuleMessage.ModuleMessageType.RedError);
+                            return;
+                        }
+
+                        this.RootFolderViewModel = groupFolder;
+                        break;
+
+                    case DigitalAssestsMode.User:
+                        if (PortalSettings.UserId == Null.NullInteger)
+                        {
+                            Skin.AddModuleMessage(this, Localization.GetString("InvalidUser.Error", LocalResourceFile), ModuleMessage.ModuleMessageType.RedError);
+                            return;
+                        }
+                  
+                        this.RootFolderViewModel = this.controller.GetUserFolder(this.PortalSettings.UserInfo);     
+                        break;
+
+                    default:
+                        //handle upgrades where FilterCondition didn't exist
+                        SettingsRepository.SetDefaultFilterCondition(ModuleId);
+                        this.RootFolderViewModel = this.controller.GetRootFolder(ModuleId);
+                        break;
+                }
                 
+                var initialPath = "";
                 int folderId;
-                if (int.TryParse(Request["folderId"] ?? state["folderId"], out folderId))
+                if (int.TryParse(Request["folderId"] ?? DAMState["folderId"], out folderId))
                 {
                     var folder = FolderManager.Instance.GetFolder(folderId);
-                    Path = folder != null ? PathUtils.Instance.RemoveTrailingSlash(folder.FolderPath) : "";
-                }
-                else
-                {
-                    Path = "";
+                    if (folder != null && folder.FolderPath.StartsWith(RootFolderViewModel.FolderPath))
+                    {
+                        initialPath = PathUtils.Instance.RemoveTrailingSlash(folder.FolderPath.Substring(RootFolderViewModel.FolderPath.Length));
+                    }
                 }
 
-                PageSize = Request["pageSize"] ?? state["pageSize"] ?? "10";
-                ActiveView = Request["view"] ?? state["view"] ?? "gridview";
+                PageSize = Request["pageSize"] ?? DAMState["pageSize"] ?? "10";
+                ActiveView = Request["view"] ?? DAMState["view"] ?? "gridview";
 
-                InitializeTreeViews();
+                Page.DataBind();
+                InitializeTreeViews(initialPath);
+                InitializeSearchBox();
                 InitializeFolderType();
-
                 InitializeGridContextMenu();
-
                 InitializeEmptySpaceContextMenu();
 
                 FolderNameRegExValidator.ErrorMessage = controller.GetInvalidCharsErrorText();
@@ -465,15 +613,20 @@ namespace DotNetNuke.Modules.DigitalAssets
             {
                 base.OnInit(e);
 
+                fileUpload.ModuleId = ModuleId;
+                fileUpload.Options.Parameters.Add("isHostPortal", IsHostPortal ? "true" : "false");
+
                 ServicesFramework.Instance.RequestAjaxScriptSupport();
                 ServicesFramework.Instance.RequestAjaxAntiForgerySupport();
-                jQuery.RequestDnnPluginsRegistration();
-                jQuery.RegisterFileUpload(Page);
+                JavaScript.RequestRegistration(CommonJs.DnnPlugins);
 
-                ClientResourceManager.RegisterScript(Page, "~/js/dnn.modalpopup.js", FileOrder.Js.DnnModalPopup);
+                var popupFilePath = HttpContext.Current.IsDebuggingEnabled
+                                   ? "~/js/Debug/dnn.modalpopup.js"
+                                   : "~/js/dnn.modalpopup.js";
+                ClientResourceManager.RegisterScript(Page, popupFilePath, FileOrder.Js.DnnModalPopup);
                 ClientResourceManager.RegisterScript(Page, "~/DesktopModules/DigitalAssets/ClientScripts/dnn.DigitalAssetsController.js", FileOrder.Js.DefaultPriority);
 
-                int i = 1;
+                var i = 1;
                 foreach (var script in epm.GetScriptItemExtensionPoints("DigitalAssets"))
                 {
                     ClientResourceManager.RegisterScript(Page, script.ScriptName, FileOrder.Js.DefaultPriority + i++);
@@ -483,6 +636,9 @@ namespace DotNetNuke.Modules.DigitalAssets
 
                 InitializeGrid();
                 FolderTypeComboBox.ItemDataBound += OnItemDataBoundFolderTypeComboBox;
+
+                MainToolBar.ModuleContext = ModuleContext;
+                SelectionToolBar.ModuleContext = ModuleContext;
             }
             catch (Exception exc) //Module failed to load
             {
@@ -499,12 +655,9 @@ namespace DotNetNuke.Modules.DigitalAssets
                 {
                     actions.Add(GetNextActionID(), Localization.GetString("ManageFolderTypes", LocalResourceFile), "", "", "../DesktopModules/DigitalAssets/Images/manageFolderTypes.png", EditUrl("FolderMappings"), false, SecurityAccessLevel.Edit, true, false);
 
-                    foreach (var item in epm.GetMenuItemExtensionPoints("DigitalAssets", "ModuleActions"))
+                    foreach (var item in epm.GetMenuItemExtensionPoints("DigitalAssets", "ModuleActions", Filter))
                     {
-                        if (!IsHostMenu || item.EnabledOnHost)
-                        {
-                            actions.Add(GetNextActionID(), item.Text, "", "", item.Icon, EditUrl(item.Value), false, SecurityAccessLevel.Edit, true, false);
-                        }
+                        actions.Add(GetNextActionID(), item.Text, "", "", item.Icon, EditUrl(item.Value), false, SecurityAccessLevel.Edit, true, false);
                     }
                 }
                 else
@@ -518,28 +671,27 @@ namespace DotNetNuke.Modules.DigitalAssets
 
         protected void GridOnItemCreated(object sender, GridItemEventArgs e)
         {
-            if (e.Item is GridPagerItem)
-            {
-                var items = new[]
-                    {
-                        new RadComboBoxItem { Text = "10", Value = "10" },
-                        new RadComboBoxItem { Text = "25", Value = "25" },
-                        new RadComboBoxItem { Text = "50", Value = "50" },
-                        new RadComboBoxItem { Text = "100", Value = "100" },
-                        new RadComboBoxItem 
-                        { 
-                            Text = Localization.GetString("All", LocalResourceFile), 
-                            Value = int.MaxValue.ToString(CultureInfo.InvariantCulture) 
-                        }
-                    };
+            if (!(e.Item is GridPagerItem)) return;
 
-                var dropDown = (RadComboBox)e.Item.FindControl("PageSizeComboBox");
-                dropDown.Items.Clear();
-                foreach (var item in items)
-                {
-                    item.Attributes.Add("ownerTableViewId", e.Item.OwnerTableView.ClientID);
-                    dropDown.Items.Add(item);
-                }
+            var items = new[]
+            {
+                new RadComboBoxItem { Text = "10", Value = "10" },
+                new RadComboBoxItem { Text = "25", Value = "25" },
+                new RadComboBoxItem { Text = "50", Value = "50" },
+                new RadComboBoxItem { Text = "100", Value = "100" },
+                new RadComboBoxItem 
+                    { 
+                        Text = Localization.GetString("All", LocalResourceFile), 
+                        Value = int.MaxValue.ToString(CultureInfo.InvariantCulture) 
+                    }
+            };
+
+            var dropDown = (RadComboBox)e.Item.FindControl("PageSizeComboBox");
+            dropDown.Items.Clear();
+            foreach (var item in items)
+            {
+                item.Attributes.Add("ownerTableViewId", e.Item.OwnerTableView.ClientID);
+                dropDown.Items.Add(item);
             }
         }
     }

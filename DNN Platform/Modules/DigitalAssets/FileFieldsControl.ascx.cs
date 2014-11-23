@@ -1,7 +1,7 @@
 ﻿#region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -20,20 +20,15 @@
 #endregion
 
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text.RegularExpressions;
-using System.Web;
-using System.Web.UI;
-using System.Web.UI.WebControls;
 
 using DotNetNuke.Entities.Modules;
 using DotNetNuke.Framework;
+using DotNetNuke.Framework.JavaScriptLibraries;
 using DotNetNuke.Modules.DigitalAssets.Components.Controllers;
 using DotNetNuke.Modules.DigitalAssets.Components.Controllers.Models;
 using DotNetNuke.Modules.DigitalAssets.Components.ExtensionPoint;
-using DotNetNuke.Security.Permissions;
 using DotNetNuke.Services.FileSystem;
 
 namespace DotNetNuke.Modules.DigitalAssets
@@ -57,10 +52,10 @@ namespace DotNetNuke.Modules.DigitalAssets
 
         private FileAttributes GetFileAttributesUpdated(FileAttributes? attributes)
         {
-            var result = (FileAttributeArchiveCheckBox.Checked) ? (attributes | FileAttributes.Archive) : (attributes & ~FileAttributes.Archive);
-            result = (FileAttributeHiddenCheckBox.Checked) ? (result | FileAttributes.Hidden) : (result & ~FileAttributes.Hidden);
-            result = (FileAttributeReadonlyCheckBox.Checked) ? (result | FileAttributes.ReadOnly) : (result & ~FileAttributes.ReadOnly);
-            result = (FileAttributeSystemCheckBox.Checked) ? (result | FileAttributes.System) : (result & ~FileAttributes.System);
+            var result = FileAttributeArchiveCheckBox.Checked ? (attributes | FileAttributes.Archive) : (attributes & ~FileAttributes.Archive);
+            result = FileAttributeHiddenCheckBox.Checked ? (result | FileAttributes.Hidden) : (result & ~FileAttributes.Hidden);
+            result = FileAttributeReadonlyCheckBox.Checked ? (result | FileAttributes.ReadOnly) : (result & ~FileAttributes.ReadOnly);
+            result = FileAttributeSystemCheckBox.Checked ? (result | FileAttributes.System) : (result & ~FileAttributes.System);
 
             return result.Value;
         }
@@ -75,7 +70,7 @@ namespace DotNetNuke.Modules.DigitalAssets
         {
             base.OnInit(e);
 
-            jQuery.RequestDnnPluginsRegistration();
+            JavaScript.RequestRegistration(CommonJs.DnnPlugins);
         }
 
         protected override void OnLoad(EventArgs e)

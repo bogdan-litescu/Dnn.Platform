@@ -1,7 +1,7 @@
 ﻿#region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -83,6 +83,19 @@ namespace DotNetNuke.Services.FileSystem
         /// </summary>
         /// <param name="folderId">The folder identifier.</param>
         void DeleteFolder(int folderId);
+
+        /// <summary>
+        /// Unlink the specified folder
+        /// </summary>
+        /// <param name="folder">The folder to unlink</param>
+        void UnlinkFolder(IFolderInfo folder);
+
+        /// <summary>
+        /// Delete the specified folder and all its content
+        /// </summary>
+        /// <param name="folder"> The folder to delete></param>
+        /// <param name="notDeletedSubfolders">A collection with all not deleted subfolders</param>
+        void DeleteFolder(IFolderInfo folder, ICollection<IFolderInfo> notDeletedSubfolders);
 
         /// <summary>
         /// Checks the existence of the specified folder in the specified portal.

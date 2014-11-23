@@ -24,6 +24,8 @@
     <IISExpressAnonymousAuthentication />
     <IISExpressWindowsAuthentication />
     <IISExpressUseClassicPipelineMode />
+    <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\..\..\..\Evoq.Content\</SolutionDir>
+    <RestorePackages>true</RestorePackages>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -76,6 +78,9 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="..\..\..\SolutionInfo.cs">
+      <Link>SolutionInfo.cs</Link>
+    </Compile>
     <Compile Include="Components\PrimaryKeyEventArgs.cs" />
     <Compile Include="Components\ProfileEventArgs.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
@@ -83,7 +88,6 @@
     <Compile Include="Presenters\ProfileManagerPresenter.cs" />
     <Compile Include="Views\ProfileManagerView.ascx.cs">
       <DependentUpon>ProfileManagerView.ascx</DependentUpon>
-      <SubType>ASPXCodeBehind</SubType>
     </Compile>
     <Compile Include="Views\ProfileManagerView.ascx.designer.cs">
       <DependentUpon>ProfileManagerView.ascx</DependentUpon>
@@ -98,6 +102,7 @@
     <Content Include="Images\DevicePreview_Standard_16X16.png" />
     <Content Include="Images\DevicePreview_Standard_32X32.png" />
     <Content Include="packages.config" />
+    <Content Include="Module.build" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="license.txt" />
@@ -127,7 +132,9 @@
       <Private>False</Private>
     </ProjectReference>
   </ItemGroup>
-  <ItemGroup />
+  <ItemGroup>
+    <Content Include="App_LocalResources\ProfileManagerView.ascx.resx" />
+  </ItemGroup>
   <PropertyGroup>
     <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">10.0</VisualStudioVersion>
     <VSToolsPath Condition="'$(VSToolsPath)' == ''">$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)</VSToolsPath>
@@ -146,54 +153,19 @@
           <IISUrl>
           </IISUrl>
           <NTLMAuthentication>False</NTLMAuthentication>
-          <UseCustomServer>False</UseCustomServer>
-          <CustomServerUrl>
-          </CustomServerUrl>
+          <UseCustomServer>True</UseCustomServer>
+          <CustomServerUrl>http://localhost/DNN_Platform</CustomServerUrl>
           <SaveServerSettingsInUserFile>False</SaveServerSettingsInUserFile>
         </WebProjectProperties>
       </FlavorProperties>
     </VisualStudio>
   </ProjectExtensions>
-  <PropertyGroup>
-    <Extension>zip</Extension>
-    <DNNFileName>dnn_PreviewProfileManagement</DNNFileName>
-    <PackageName>DNNCE_PreviewProfileManagement</PackageName>
-    <BuildScriptsPath>$(MSBuildProjectDirectory)\..\..\..\Build\BuildScripts</BuildScriptsPath>
-    <WebsitePath>$(MSBuildProjectDirectory)\..\..\..\Website</WebsitePath>
-    <WebsiteInstallPath>$(WebsitePath)\Install\Module</WebsiteInstallPath>
-  </PropertyGroup>
-  <Import Project="$(BuildScriptsPath)\Package.Targets" />
-  <Target Name="AfterBuild" DependsOnTargets="CopyBin;GetFiles;DebugProject;Package">
-  </Target>
-  <Target Name="CopyBin">
-    <Copy SourceFiles="$(MSBuildProjectDirectory)\bin\$(AssemblyName).dll" DestinationFolder="$(WebsitePath)/bin" />
-    <Copy SourceFiles="$(MSBuildProjectDirectory)\bin\$(AssemblyName).pdb" DestinationFolder="$(WebsitePath)/bin" />
-    <Copy SourceFiles="$(MSBuildProjectDirectory)\bin\$(AssemblyName).xml" DestinationFolder="$(WebsitePath)/bin" />
-  </Target>
-  <Target Name="GetFiles">
-    <ItemGroup>
-      <TextFiles Include="*.txt" Exclude="license.txt;releasenotes.txt" />
-      <SourceFiles Include="*.asmx;*.js;*.css;*.png" />
-      <ResourceFiles Include="App_LocalResources\*.resx" />
-      <JsFiles Include="js/*.*" />
-      <ConfigFiles Include="*.config" />
-      <Images Include="Images/*.*" />
-      <Views Include="Views\*.ascx" />
-      <DataFiles Include="Resources/*.xml" />
-      <Resources Include="@(ResourceFiles);@(SourceFiles);@(Images);@(ConfigFiles);@(TextFiles);@(JsFiles);@(DataFiles)" />
-    </ItemGroup>
-  </Target>
-  <Target Name="DebugProject" Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <CreateItem Include="*.dnn">
-      <Output TaskParameter="Include" ItemName="Manifests" />
-    </CreateItem>
-    <CreateItem Include="web.config">
-      <Output TaskParameter="Include" ItemName="Config" />
-    </CreateItem>
-    <Copy SourceFiles="@(SourceFiles)" DestinationFolder="$(WebsitePath)\DesktopModules\DevicePreviewManagement" />
-    <Copy SourceFiles="@(Views)" DestinationFolder="$(WebsitePath)\DesktopModules\DevicePreviewManagement" />
-    <Copy SourceFiles="@(Images)" DestinationFolder="$(WebsitePath)\DesktopModules\DevicePreviewManagement\Images" />
-    <Copy SourceFiles="@(DataFiles)" DestinationFolder="$(WebsitePath)\DesktopModules\DevicePreviewManagement\Resources" />
-    <Copy SourceFiles="@(ResourceFiles)" DestinationFolder="$(WebsitePath)\DesktopModules\DevicePreviewManagement\App_LocalResources" />
+  <Import Project="Module.build" />
+  <Import Project="$(SolutionDir)\.nuget\NuGet.targets" Condition="Exists('$(SolutionDir)\.nuget\NuGet.targets')" />
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>This project references NuGet package(s) that are missing on this computer. Enable NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(SolutionDir)\.nuget\NuGet.targets')" Text="$([System.String]::Format('$(ErrorText)', '$(SolutionDir)\.nuget\NuGet.targets'))" />
   </Target>
 </Project>

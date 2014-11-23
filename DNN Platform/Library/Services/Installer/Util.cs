@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -129,6 +129,9 @@ namespace DotNetNuke.Services.Installer
         public static string LANGUAGE_PortalsEnabled = GetLocalizedString("LANGUAGE_PortalsEnabled");
         public static string LANGUAGE_Registered = GetLocalizedString("LANGUAGE_Registered");
         public static string LANGUAGE_UnRegistered = GetLocalizedString("LANGUAGE_UnRegistered");
+        public static string LIBRARY_ReadSuccess = GetLocalizedString("LIBRARY_ReadSuccess");
+        public static string LIBRARY_Registered = GetLocalizedString("LIBRARY_Registered");
+        public static string LIBRARY_UnRegistered = GetLocalizedString("LIBRARY_UnRegistered");
         public static string MODULE_ControlKeyMissing = GetLocalizedString("MODULE_ControlKeyMissing");
         public static string MODULE_ControlTypeMissing = GetLocalizedString("MODULE_ControlTypeMissing");
         public static string MODULE_FriendlyNameMissing = GetLocalizedString("MODULE_FriendlyNameMissing");

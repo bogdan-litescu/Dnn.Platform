@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -25,7 +25,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading;
-
+using System.Web;
 using DotNetNuke.Common;
 using DotNetNuke.Common.Lists;
 using DotNetNuke.Common.Utilities;
@@ -33,6 +33,7 @@ using DotNetNuke.Entities.Portals;
 using DotNetNuke.Entities.Profile;
 using DotNetNuke.Entities.Users;
 using DotNetNuke.Framework;
+using DotNetNuke.Framework.JavaScriptLibraries;
 using DotNetNuke.Security;
 using DotNetNuke.Services.Exceptions;
 using DotNetNuke.Services.Localization;
@@ -79,13 +80,14 @@ namespace DotNetNuke.Modules.Admin.Users
         {
             base.OnInit(e);
 
-			//redirect to home page if the user has been deleted
+			//throw 404 so that deleted profile is not reindexed
 			if(ProfileUser == null || ProfileUser.IsDeleted)
 			{
-				Response.Redirect(GetRedirectUrl(), true);
+    		    throw new HttpException(404, "Not Found");
 			}
 
-            jQuery.RegisterJQuery(Page);
+            JavaScript.RequestRegistration(CommonJs.jQuery);
+            JavaScript.RequestRegistration(CommonJs.jQueryMigrate);
         }
 
 		/// <summary>
@@ -168,9 +170,6 @@ namespace DotNetNuke.Modules.Admin.Users
                 StringBuilder sb = new StringBuilder();
                 bool propertyNotFound = false;
 
-			    var dataType = new ListController().GetListEntryInfo("DataType", "RichText");
-
-
                 foreach (ProfilePropertyDefinition property in ProfileUser.Profile.ProfileProperties)
                 {
                     string value = propertyAccess.GetProperty(property.PropertyName,
@@ -184,13 +183,12 @@ namespace DotNetNuke.Modules.Admin.Users
                     var clientName = Localization.GetSafeJSString(property.PropertyName);
                     sb.Append("self['" + clientName + "'] = ko.observable(");
                     sb.Append("\"");
-                    value = Localization.GetSafeJSString(Server.HtmlDecode(value));
-
-                    if(property.DataType == dataType.EntryID)
+                    if (!string.IsNullOrEmpty(value))
                     {
-                        value = value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+                        value = Localization.GetSafeJSString(Server.HtmlDecode(value));
+                        value = value.Replace("\r", string.Empty).Replace("\n", " ");
+                        value = value.Replace(";", string.Empty).Replace("//", string.Empty);
                     }
-
                     sb.Append(value + "\"" + ");");
                     sb.Append('\n');
                     sb.Append("self['" + clientName + "Text'] = '");
@@ -204,6 +202,8 @@ namespace DotNetNuke.Modules.Admin.Users
 			                       : String.Empty;
 
                 sb.Append("self.Email = ko.observable('");
+                email = Localization.GetSafeJSString(Server.HtmlDecode(email));
+                email = email.Replace(";", string.Empty).Replace("//", string.Empty);
                 sb.Append(email + "');");
                 sb.Append('\n');
                 sb.Append("self.EmailText = '");

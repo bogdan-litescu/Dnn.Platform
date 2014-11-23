@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -72,7 +72,7 @@ namespace DotNetNuke.Services.Installer.Writers
                 else
                 {
 					//Get the BasePath of the Dependent Package
-                    PackageInfo dependendentPackage = PackageController.GetPackage(LanguagePack.DependentPackageID);
+                    PackageInfo dependendentPackage = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.PackageID == LanguagePack.DependentPackageID);
                     PackageWriterBase dependentPackageWriter = PackageWriterFactory.GetWriter(dependendentPackage);
                     BasePath = dependentPackageWriter.BasePath;
                 }
@@ -511,7 +511,7 @@ namespace DotNetNuke.Services.Installer.Writers
                                     if (kvp.Value.FolderName.ToLowerInvariant() == moduleName)
                                     {
 										//Found Module - Get Package
-                                        PackageInfo dependentPackage = PackageController.GetPackage(kvp.Value.PackageID);
+                                        var dependentPackage = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.PackageID == kvp.Value.PackageID);
                                         Package.Name += "_" + dependentPackage.Name;
                                         Package.FriendlyName += " " + dependentPackage.FriendlyName;
                                         _LanguagePack = new LanguagePackInfo();

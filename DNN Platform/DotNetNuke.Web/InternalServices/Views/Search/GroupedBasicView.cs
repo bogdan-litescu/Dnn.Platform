@@ -1,7 +1,7 @@
 ﻿#region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -50,7 +50,7 @@ namespace DotNetNuke.Web.InternalServices.Views.Search
         public GroupedBasicView(BasicView basic)
         {
             DocumentTypeName = basic.DocumentTypeName;
-            Results = new List<BasicView> {new BasicView {Title = basic.Title, Snippet = basic.Snippet, DocumentUrl = basic.DocumentUrl}};
+            Results = new List<BasicView> {new BasicView {Title = basic.Title, Snippet = basic.Snippet, DocumentUrl = basic.DocumentUrl, Attributes = basic.Attributes}};
         }
 
         #endregion

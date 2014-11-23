@@ -2,7 +2,7 @@
 
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -24,7 +24,7 @@
 #region Usings
 
 using System;
-
+using System.Collections.Specialized;
 using DotNetNuke.Authentication.Facebook.Components;
 using DotNetNuke.Services.Authentication;
 using DotNetNuke.Services.Authentication.OAuth;
@@ -61,6 +61,13 @@ namespace DotNetNuke.Authentication.Facebook
 
             loginItem.Visible = (Mode == AuthMode.Login);
             registerItem.Visible = (Mode == AuthMode.Register);
+        }
+
+        protected override void AddCustomProperties(NameValueCollection properties)
+        {
+            base.AddCustomProperties(properties);
+
+            properties.Add("Facebook", OAuthClient.GetCurrentUser<FacebookUserData>().Link.ToString());
         }
 
         private void loginButton_Click(object sender, EventArgs e)

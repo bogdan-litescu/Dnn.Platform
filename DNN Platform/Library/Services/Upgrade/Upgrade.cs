@@ -1,7 +1,8 @@
+
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -41,17 +42,18 @@ using DotNetNuke.Common.Utilities;
 using DotNetNuke.Data;
 using DotNetNuke.Entities.Content;
 using DotNetNuke.Entities.Content.Taxonomy;
+using DotNetNuke.Entities.Content.Workflow;
 using DotNetNuke.Entities.Controllers;
 using DotNetNuke.Entities.Host;
 using DotNetNuke.Entities.Modules;
 using DotNetNuke.Entities.Modules.Definitions;
 using DotNetNuke.Entities.Portals;
-using DotNetNuke.Entities.Portals.Internal;
 using DotNetNuke.Entities.Profile;
 using DotNetNuke.Entities.Tabs;
 using DotNetNuke.Entities.Users;
 using DotNetNuke.Entities.Users.Social;
 using DotNetNuke.Framework;
+using DotNetNuke.Framework.JavaScriptLibraries;
 using DotNetNuke.Instrumentation;
 using DotNetNuke.Modules.Dashboard.Components.Modules;
 using DotNetNuke.Security;
@@ -62,11 +64,13 @@ using DotNetNuke.Services.Authentication;
 using DotNetNuke.Services.EventQueue.Config;
 using DotNetNuke.Services.FileSystem;
 using DotNetNuke.Services.Installer;
+using DotNetNuke.Services.Installer.Dependencies;
 using DotNetNuke.Services.Installer.Log;
 using DotNetNuke.Services.Installer.Packages;
 using DotNetNuke.Services.Localization;
 using DotNetNuke.Services.Localization.Internal;
 using DotNetNuke.Services.Log.EventLog;
+using DotNetNuke.Services.Search;
 using DotNetNuke.Services.Social.Messaging.Internal;
 using DotNetNuke.Services.Social.Notifications;
 using DotNetNuke.Services.Upgrade.InternalController.Steps;
@@ -74,6 +78,9 @@ using DotNetNuke.Services.Upgrade.Internals;
 using DotNetNuke.Services.Upgrade.Internals.Steps;
 using DotNetNuke.UI.Internals;
 
+using ICSharpCode.SharpZipLib.Zip;
+
+using Assembly = System.Reflection.Assembly;
 using FileInfo = DotNetNuke.Services.FileSystem.FileInfo;
 using ModuleInfo = DotNetNuke.Entities.Modules.ModuleInfo;
 using Util = DotNetNuke.Entities.Content.Common.Util;
@@ -95,7 +102,8 @@ namespace DotNetNuke.Services.Upgrade
     ///-----------------------------------------------------------------------------
     public class Upgrade
     {
-    	private static readonly ILog Logger = LoggerSource.Instance.GetLogger(typeof (Upgrade));
+        private static readonly ILog Logger = LoggerSource.Instance.GetLogger(typeof(Upgrade));
+
         #region Private Shared Field
 
         private static DateTime _startTime;
@@ -125,6 +133,14 @@ namespace DotNetNuke.Services.Upgrade
 
         #region Private Methods
 
+        private static Version ApplicationVersion
+        {
+            get
+            {
+                return Assembly.GetExecutingAssembly().GetName().Version;
+            }
+        }
+
         /// -----------------------------------------------------------------------------
         /// <summary>
         /// AddAdminPages adds an Admin Page and an associated Module to all configured Portals
@@ -132,7 +148,7 @@ namespace DotNetNuke.Services.Upgrade
         ///	<param name="tabName">The Name to give this new Tab</param>
         /// <param name="description">Description.</param>
         ///	<param name="tabIconFile">The Icon for this new Tab</param>
-		/// <param name="tabIconFileLarge">The large Icon for this new Tab</param>
+        /// <param name="tabIconFileLarge">The large Icon for this new Tab</param>
         ///	<param name="isVisible">A flag indicating whether the tab is visible</param>
         ///	<param name="moduleDefId">The Module Deinition Id for the module to be aded to this tab</param>
         ///	<param name="moduleTitle">The Module's title</param>
@@ -146,22 +162,19 @@ namespace DotNetNuke.Services.Upgrade
             DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogStart", Localization.Localization.GlobalResourceFile) + "AddAdminPages:" + tabName);
             //Call overload with InheritPermisions=True
             AddAdminPages(tabName, description, tabIconFile, tabIconFileLarge, isVisible, moduleDefId, moduleTitle, moduleIconFile, true);
-            
+
         }
 
         private static void AddAdminRoleToPage(string tabPath)
         {
             DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogStart", Localization.Localization.GlobalResourceFile) + "AddAdminRoleToPage:" + tabPath);
-            var portalController = new PortalController();
-            var tabController = new TabController();
-            TabInfo tab;
 
-            foreach (PortalInfo portal in portalController.GetPortals())
+            foreach (PortalInfo portal in PortalController.Instance.GetPortals())
             {
                 int tabID = TabController.GetTabByTabPath(portal.PortalID, tabPath, Null.NullString);
                 if ((tabID != Null.NullInteger))
                 {
-                    tab = tabController.GetTab(tabID, portal.PortalID, true);
+                    TabInfo tab = TabController.Instance.GetTab(tabID, portal.PortalID, true);
 
                     if ((tab.TabPermissions.Count == 0))
                     {
@@ -176,13 +189,12 @@ namespace DotNetNuke.Services.Upgrade
         private static void AddConsoleModuleSettings(int moduleID)
         {
             DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogStart", Localization.Localization.GlobalResourceFile) + "AddConsoleModuleSettings:" + moduleID);
-            var moduleController = new ModuleController();
 
-            moduleController.UpdateModuleSetting(moduleID, "DefaultSize", "IconFileLarge");
-            moduleController.UpdateModuleSetting(moduleID, "AllowSizeChange", "False");
-            moduleController.UpdateModuleSetting(moduleID, "DefaultView", "Hide");
-            moduleController.UpdateModuleSetting(moduleID, "AllowViewChange", "False");
-            moduleController.UpdateModuleSetting(moduleID, "ShowTooltip", "True");
+            ModuleController.Instance.UpdateModuleSetting(moduleID, "DefaultSize", "IconFileLarge");
+            ModuleController.Instance.UpdateModuleSetting(moduleID, "AllowSizeChange", "False");
+            ModuleController.Instance.UpdateModuleSetting(moduleID, "DefaultView", "Hide");
+            ModuleController.Instance.UpdateModuleSetting(moduleID, "AllowViewChange", "False");
+            ModuleController.Instance.UpdateModuleSetting(moduleID, "ShowTooltip", "True");
         }
 
         private static void AddEventQueueApplicationStartFirstRequest()
@@ -309,10 +321,10 @@ namespace DotNetNuke.Services.Upgrade
                                       FriendlyName = desktopModuleName,
                                       Name = string.Concat("DotNetNuke.", desktopModuleName),
                                       PackageType = "Module",
-                                      Owner = "DotNetNuke",
-                                      Organization = "DotNetNuke Corporation",
-                                      Url = "www.dotnetnuke.com",
-                                      Email = "support@dotnetnuke.com"
+                                      Owner = "DNN",
+                                      Organization = "DNN Corp.",
+                                      Url = "http://www.dnnsoftware.com",
+                                      Email = "support@dnnsoftware.com"
                                   };
                 if (desktopModuleName == "Extensions" || desktopModuleName == "Skin Designer" || desktopModuleName == "Dashboard")
                 {
@@ -320,7 +332,7 @@ namespace DotNetNuke.Services.Upgrade
                 }
                 package.Version = new Version(1, 0, 0);
 
-                package.PackageID = PackageController.AddPackage(package, false);
+                PackageController.Instance.SaveExtensionPackage(package);
 
                 string moduleName = desktopModuleName.Replace(" ", "");
                 desktopModule = new DesktopModuleInfo
@@ -355,7 +367,7 @@ namespace DotNetNuke.Services.Upgrade
             var moduleDefinition = ModuleDefinitionController.GetModuleDefinitionByFriendlyName(moduleDefinitionName, desktopModule.DesktopModuleID);
             if (moduleDefinition == null)
             {
-                moduleDefinition = new ModuleDefinitionInfo {ModuleDefID = Null.NullInteger, DesktopModuleID = desktopModule.DesktopModuleID, FriendlyName = moduleDefinitionName};
+                moduleDefinition = new ModuleDefinitionInfo { ModuleDefID = Null.NullInteger, DesktopModuleID = desktopModule.DesktopModuleID, FriendlyName = moduleDefinitionName };
 
                 moduleDefinition.ModuleDefID = ModuleDefinitionController.SaveModuleDefinition(moduleDefinition, false, false);
             }
@@ -394,7 +406,7 @@ namespace DotNetNuke.Services.Upgrade
         ///	<param name="tabName">The Name to give this new Tab</param>
         /// <param name="description">Description.</param>
         ///	<param name="tabIconFile">The Icon for this new Tab</param>
-		/// <param name="tabIconFileLarge">The Large Icon for this new Tab</param>
+        /// <param name="tabIconFileLarge">The Large Icon for this new Tab</param>
         ///	<param name="isVisible">A flag indicating whether the tab is visible</param>
         ///	<param name="permissions">Page Permissions Collection for this page</param>
         /// <param name="isAdmin">Is an admin page</param>
@@ -426,7 +438,7 @@ namespace DotNetNuke.Services.Upgrade
         ///	<param name="tabName">The Name to give this new Tab</param>
         /// <param name="description">Description.</param>
         ///	<param name="tabIconFile">The Icon for this new Tab</param>
-		/// <param name="tabIconFileLarge">The large Icon for this new Tab</param>
+        /// <param name="tabIconFileLarge">The large Icon for this new Tab</param>
         ///	<param name="isVisible">A flag indicating whether the tab is visible</param>
         ///	<param name="permissions">Page Permissions Collection for this page</param>
         /// <param name="isAdmin">Is and admin page</param>
@@ -437,9 +449,8 @@ namespace DotNetNuke.Services.Upgrade
         private static TabInfo AddPage(int portalId, int parentId, string tabName, string description, string tabIconFile, string tabIconFileLarge, bool isVisible, TabPermissionCollection permissions, bool isAdmin)
         {
             DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogStart", Localization.Localization.GlobalResourceFile) + "AddPage:" + tabName);
-            var tabController = new TabController();
 
-            TabInfo tab = tabController.GetTabByName(tabName, portalId, parentId);
+            TabInfo tab = TabController.Instance.GetTabByName(tabName, portalId, parentId);
 
             if (tab == null || tab.ParentId != parentId)
             {
@@ -458,7 +469,7 @@ namespace DotNetNuke.Services.Upgrade
                               IconFileLarge = tabIconFileLarge,
                               IsDeleted = false
                           };
-                tab.TabID = tabController.AddTab(tab, !isAdmin);
+                tab.TabID = TabController.Instance.AddTab(tab, !isAdmin);
 
                 if (((permissions != null)))
                 {
@@ -469,7 +480,7 @@ namespace DotNetNuke.Services.Upgrade
                     TabPermissionController.SaveTabPermissions(tab);
                 }
             }
-           return tab;
+            return tab;
         }
 
         /// -----------------------------------------------------------------------------
@@ -487,170 +498,15 @@ namespace DotNetNuke.Services.Upgrade
         {
             DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogStart", Localization.Localization.GlobalResourceFile) + "AddPagePermission:" + key);
             var permissionController = new PermissionController();
-            var permission = (PermissionInfo) permissionController.GetPermissionByCodeAndKey("SYSTEM_TAB", key)[0];
+            var permission = (PermissionInfo)permissionController.GetPermissionByCodeAndKey("SYSTEM_TAB", key)[0];
 
-            var tabPermission = new TabPermissionInfo {PermissionID = permission.PermissionID, RoleID = roleId, AllowAccess = true};
+            var tabPermission = new TabPermissionInfo { PermissionID = permission.PermissionID, RoleID = roleId, AllowAccess = true };
 
             permissions.Add(tabPermission);
         }
 
-        private static void AddProfessionalPreviewPage(int parentId, string tabPath, string moduleFriendlyName, string tabName, string tabDescription, string smallIcon, string largeIcon)
-        {
-            DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogStart", Localization.Localization.GlobalResourceFile) + "AddProfessionalPreviewPage:" + parentId);
-            var tabController = new TabController();
-            TabInfo hostTab;
 
-            //Get web servers module
-            ModuleDefinitionInfo moduleDef = ModuleDefinitionController.GetModuleDefinitionByFriendlyName(moduleFriendlyName);
-
-            //Add Pages under Professional Features Tab
-            int tabId = TabController.GetTabByTabPath(Null.NullInteger, tabPath, Null.NullString);
-            if (tabId == Null.NullInteger)
-            {
-                //Add host page
-                hostTab = AddHostPage(tabName, tabDescription, smallIcon, largeIcon, true);
-                hostTab.ParentId = parentId;
-                tabController.UpdateTab(hostTab);
-
-                //Add module to page
-                AddModuleToPage(hostTab, moduleDef.ModuleDefID, tabName, largeIcon, true);
-            }
-        }
-
-        private static void AddLinkedProfessionalPreviewPage(int parentId, string tabPath, string url, string tabName, string tabDescription, string smallIcon, string largeIcon)
-        {
-            DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogStart", Localization.Localization.GlobalResourceFile) + "AddLinkedProfessionalPreviewPage:" + parentId);
-            var tabController = new TabController();
-            TabInfo newTab;
-
-            if (TabController.GetTabByTabPath(Null.NullInteger, tabPath, Null.NullString) == Null.NullInteger)
-            {
-                newTab = AddHostPage(tabName, tabDescription, smallIcon, largeIcon, true);
-                newTab.ParentId = parentId;
-                newTab.Url = url;
-                tabController.UpdateTab(newTab);
-            }
-        }
-
-        private static void AddProfessionalPreviewPages()
-        {
-            DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogStart", Localization.Localization.GlobalResourceFile) + "AddProfessionalPreviewPages:");
-            var tabController = new TabController();
-            TabInfo newTab;
-
-            //Add new Professional Preview module
-            int moduleDefID = AddModuleDefinition("ProfessionalPreview", "", "ProfessionalPreview", false, true);
-            AddModuleControl(moduleDefID, "", "", "DesktopModules/Admin/ProfessionalPreview/ProfessionalPreview.ascx", "~/images/icon_profeatures_16px.png", SecurityAccessLevel.Host, 0);
-
-            //Add Advanced Features - hidden tab
-            int advancedFeaturesTabID = TabController.GetTabByTabPath(Null.NullInteger, "//Host//ProfessionalFeatures", Null.NullString);
-            if (advancedFeaturesTabID == Null.NullInteger)
-            {
-                newTab = AddHostPage("Professional Features", "", "~/images/icon_profeatures_16px.gif", "", true);
-                newTab.DisableLink = true;
-                tabController.UpdateTab(newTab);
-                advancedFeaturesTabID = newTab.TabID;
-            }
-
-            //Add Pages under Advanced Features Tab
-            AddProfessionalPreviewPage(advancedFeaturesTabID,
-                        "//Host//ProfessionalFeatures//ManageWebServers",
-                        "ProfessionalPreview",
-                        "Manage Web Servers",
-                        "Manage web servers in a web farm.",
-                        "~/images/icon_webservers_16px.gif",
-                        "~/images/icon_webservers_32px.gif");
-
-            AddProfessionalPreviewPage(advancedFeaturesTabID,
-                        "//Host//ProfessionalFeatures//HealthMonitoring",
-                        "ProfessionalPreview",
-                        "Health Monitoring",
-                        "Monitor health of your DotNetNuke web site.",
-                        "~/images/icon_health_16px.gif",
-                        "~/images/icon_health_32px.gif");
-
-            AddProfessionalPreviewPage(advancedFeaturesTabID,
-                        "//Host//ProfessionalFeatures//ApplicationIntegrity",
-                        "ProfessionalPreview",
-                        "Application Integrity",
-                        "View files that are different than the core framework version.",
-                        "~/images/icon_appintegrity_16px.gif",
-                        "~/images/icon_appintegrity_32px.gif");
-
-            AddLinkedProfessionalPreviewPage(advancedFeaturesTabID,
-                        "//Host//ProfessionalFeatures//KnowledgeBase",
-						"http://customers.dotnetnuke.com/KB/root.aspx",
-                        "Knowledge Base",
-                        "Comprehensive Knowledge Base that provides guidance for DotNetNuke administrative tasks and answers to common technical questions.",
-                        "~/images/icon_kb_16px.gif",
-                        "~/images/icon_kb_32px.gif");
-
-            AddLinkedProfessionalPreviewPage(advancedFeaturesTabID,
-                        "//Host//ProfessionalFeatures//SoftwareAndDocumentation",
-						"http://www.dotnetnuke.com/Resources/Manuals/tabid/1667/Default.aspx",
-                        "Software and Documentation",
-                        "Download upgrades, subscribed products and additional documentation for professional edition customers.",
-                        "~/images/icon_software_16px.gif",
-                        "~/images/icon_software_32px.gif");
-
-            AddLinkedProfessionalPreviewPage(advancedFeaturesTabID,
-                        "//Host//ProfessionalFeatures//TechnicalSupport",
-						"http://customers.dotnetnuke.com",
-                        "Technical Support",
-                        "Visit the technical support home page to find the latest support news, knowledge base articles and more.",
-                        "~/images/icon_support_16px.gif",
-                        "~/images/icon_support_32px.gif");
-
-            AddLinkedProfessionalPreviewPage(advancedFeaturesTabID,
-                        "//Host//ProfessionalFeatures//MySupportTickets",
-						"http://customers.dotnetnuke.com/Main/frmTickets.aspx",
-                        "My Support Tickets",
-                        "The Support Ticket system will allow you to email support questions to our staff. A staff member will promptly reply to your request and progress will be tracked using the ticket. You can 'Start a new Ticket' and view your existing tickets here.",
-                        "~/images/icon_mytickets_16px.gif",
-                        "~/images/icon_mytickets_32px.gif");
-
-            AddProfessionalPreviewPage(advancedFeaturesTabID,
-                        "//Host//ProfessionalFeatures//ActivateyourLicense",
-                        "ProfessionalPreview",
-                        "Activate Your License",
-                        "Activate your DotNetNuke Professional licenses. Activating your license will ensure that you continue to receive the benefits provided to our customers.",
-                        "~/images/icon_activatelicense_16px.gif",
-                        "~/images/icon_activatelicense_32px.gif");
-
-            AddLinkedProfessionalPreviewPage(advancedFeaturesTabID,
-                        "//Host//ProfessionalFeatures//LicenseManagement",
-						"http://www.dotnetnuke.com/tabid/1205/Default.aspx",
-                        "License Management",
-                        "Manage licenses for your subscribed products.",
-                        "~/images/icon_licensemgmt_16px.gif",
-                        "~/images/icon_licensemgmt_32px.gif");
-
-            AddProfessionalPreviewPage(advancedFeaturesTabID,
-                        "//Host//ProfessionalFeatures//SearchCrawlerAdmin",
-                        "ProfessionalPreview",
-                        "SearchCrawler Admin",
-                        "Administration of Search Crawler attributes..",
-                        "~/images/SearchCrawler_16px.gif",
-                        "~/images/SearchCrawler_32px.gif");
-
-            AddProfessionalPreviewPage(advancedFeaturesTabID,
-                        "//Host//ProfessionalFeatures//SecurityCenter",
-                        "ProfessionalPreview",
-                        "Security Center",
-                        "Displays Security Bulletins for this instance of DotNetNuke.",
-                        "~/images/icon_securityroles_16px.gif",
-                        "~/images/icon_securityroles_32px.gif");
-
-            AddProfessionalPreviewPage(advancedFeaturesTabID,
-                        "//Host//ProfessionalFeatures//UserSwitcher",
-                        "ProfessionalPreview",
-                        "User Switcher",
-                        "Switch to another user's identity.",
-                        "~/images/icon_usersSwitcher_16px.gif",
-                        "~/images/icon_usersSwitcher_32px.gif");            
-        }
-
-		/// -----------------------------------------------------------------------------
+        /// -----------------------------------------------------------------------------
         /// <summary>
         /// AddSearchResults adds a top level Hidden Search Results Page
         /// </summary>
@@ -659,12 +515,10 @@ namespace DotNetNuke.Services.Upgrade
         /// 	[cnurse]	11/11/2004	created 
         /// </history>
         /// -----------------------------------------------------------------------------
-		private static void AddSearchResults(int moduleDefId)
+        private static void AddSearchResults(int moduleDefId)
         {
             DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogStart", Localization.Localization.GlobalResourceFile) + "AddSearchResults:" + moduleDefId);
-            var portalController = new PortalController();
-            PortalInfo portal;
-            var portals = portalController.GetPortals();
+            var portals = PortalController.Instance.GetPortals();
             int intPortal;
 
             //Add Page to Admin Menu of all configured Portals
@@ -672,7 +526,7 @@ namespace DotNetNuke.Services.Upgrade
             {
                 var tabPermissions = new TabPermissionCollection();
 
-                portal = (PortalInfo) portals[intPortal];
+                var portal = (PortalInfo)portals[intPortal];
 
                 AddPagePermission(tabPermissions, "View", Convert.ToInt32(Globals.glbRoleAllUsers));
                 AddPagePermission(tabPermissions, "View", Convert.ToInt32(portal.AdministratorRoleId));
@@ -706,12 +560,12 @@ namespace DotNetNuke.Services.Upgrade
             SkinControlInfo skinControl = SkinControlController.GetSkinControlByKey(controlKey);
             if (skinControl == null)
             {
-                var package = new PackageInfo {Name = packageName, FriendlyName = string.Concat(controlKey, "SkinObject"), PackageType = "SkinObject", Version = new Version(1, 0, 0)};
+                var package = new PackageInfo { Name = packageName, FriendlyName = string.Concat(controlKey, "SkinObject"), PackageType = "SkinObject", Version = new Version(1, 0, 0) };
                 LegacyUtil.ParsePackageName(package);
 
-                int packageId = PackageController.AddPackage(package, false);
+                PackageController.Instance.SaveExtensionPackage(package);
 
-                skinControl = new SkinControlInfo {PackageID = packageId, ControlKey = controlKey, ControlSrc = controlSrc, SupportsPartialRendering = false};
+                skinControl = new SkinControlInfo { PackageID = package.PackageID, ControlKey = controlKey, ControlSrc = controlSrc, SupportsPartialRendering = false };
 
                 SkinControlController.SaveSkinControl(skinControl);
             }
@@ -720,100 +574,100 @@ namespace DotNetNuke.Services.Upgrade
         private static void AddDefaultModuleIcons()
         {
             DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogStart", Localization.Localization.GlobalResourceFile) + "AddDefaultModuleIcons");
-            var pkg = PackageController.GetPackageByName("DotNetNuke.Google Analytics");
+            var pkg = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.Google Analytics");
             if (pkg != null)
             {
                 pkg.FolderName = "DesktopModules/Admin/Analytics";
                 pkg.IconFile = "~/DesktopModules/Admin/Analytics/analytics.gif";
-                PackageController.UpdatePackage(pkg);
+                PackageController.Instance.SaveExtensionPackage(pkg);
             }
 
-            pkg = PackageController.GetPackageByName("DotNetNuke.Configuration Manager");
+            pkg = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.Configuration Manager");
             if (pkg != null)
             {
                 pkg.FolderName = "DesktopModules/Admin/XmlMerge";
                 pkg.IconFile = "~/DesktopModules/Admin/XmlMerge/xmlMerge.png";
-                PackageController.UpdatePackage(pkg);
+                PackageController.Instance.SaveExtensionPackage(pkg);
             }
 
-            pkg = PackageController.GetPackageByName("DotNetNuke.Console");
+            pkg = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.Console");
             if (pkg != null)
             {
                 pkg.FolderName = "DesktopModules/Admin/Console";
                 pkg.IconFile = "~/DesktopModules/Admin/Console/console.gif";
-                PackageController.UpdatePackage(pkg);
+                PackageController.Instance.SaveExtensionPackage(pkg);
             }
-            
-            pkg = PackageController.GetPackageByName("DotNetNuke.ContentList");
+
+            pkg = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.ContentList");
             if (pkg != null)
             {
                 pkg.FolderName = "DesktopModules/Admin/ContentList";
                 pkg.IconFile = "~/DesktopModules/Admin/ContentList/contentList.gif";
-                PackageController.UpdatePackage(pkg);
-            }
-            
-            pkg = PackageController.GetPackageByName("DotNetNuke.Dashboard");
-            if (pkg != null)
-            {
-            pkg.FolderName = "DesktopModules/Admin/Dashboard";
-            pkg.IconFile = "~/DesktopModules/Admin/Dashboard/dashboard.gif";
-            PackageController.UpdatePackage(pkg);
+                PackageController.Instance.SaveExtensionPackage(pkg);
             }
 
-            pkg = PackageController.GetPackageByName("DotNetNuke.Languages");
+            pkg = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.Dashboard");
+            if (pkg != null)
+            {
+                pkg.FolderName = "DesktopModules/Admin/Dashboard";
+                pkg.IconFile = "~/DesktopModules/Admin/Dashboard/dashboard.gif";
+                PackageController.Instance.SaveExtensionPackage(pkg);
+            }
+
+            pkg = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.Languages");
             if (pkg != null)
             {
                 pkg.FolderName = "DesktopModules/Admin/Languages";
                 pkg.IconFile = "~/DesktopModules/Admin/Languages/languages.gif";
-                PackageController.UpdatePackage(pkg);
+                PackageController.Instance.SaveExtensionPackage(pkg);
             }
 
-            pkg = PackageController.GetPackageByName("DotNetNuke.Marketplace");
+            pkg = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.Marketplace");
             if (pkg != null)
             {
                 pkg.FolderName = "DesktopModules/Admin/Marketplace";
                 pkg.IconFile = "~/DesktopModules/Admin/Marketplace/marketplace.gif";
-                PackageController.UpdatePackage(pkg);
+                PackageController.Instance.SaveExtensionPackage(pkg);
             }
 
-            pkg = PackageController.GetPackageByName("DotNetNuke.Sitemap");
+            pkg = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.Sitemap");
             if (pkg != null)
             {
                 pkg.FolderName = "DesktopModules/Admin/Sitemap";
                 pkg.IconFile = "~/DesktopModules/Admin/Sitemap/sitemap.gif";
-                PackageController.UpdatePackage(pkg);
+                PackageController.Instance.SaveExtensionPackage(pkg);
             }
 
-            pkg = PackageController.GetPackageByName("DotNetNuke.Skin Designer");
+            pkg = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.Skin Designer");
             if (pkg != null)
             {
                 pkg.FolderName = "DesktopModules/Admin/SkinDesigner";
                 pkg.IconFile = "~/DesktopModules/Admin/SkinDesigner/skinDesigner.gif";
-                PackageController.UpdatePackage(pkg);
+                PackageController.Instance.SaveExtensionPackage(pkg);
             }
 
-            pkg = PackageController.GetPackageByName("DotNetNuke.Skins");
+            pkg = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.Skins");
             if (pkg != null)
             {
                 pkg.FolderName = "DesktopModules/Admin/Skins";
                 pkg.IconFile = "~/DesktopModules/Admin/Skins/skins.gif";
-                PackageController.UpdatePackage(pkg);
+                PackageController.Instance.SaveExtensionPackage(pkg);
             }
 
-            pkg = PackageController.GetPackageByName("DotNetNuke.ViewProfile");
+            pkg = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.ViewProfile");
             if (pkg != null)
             {
                 pkg.FolderName = "DesktopModules/Admin/ViewProfile";
                 pkg.IconFile = "~/DesktopModules/Admin/ViewProfile/viewProfile.gif";
-                PackageController.UpdatePackage(pkg);
+                PackageController.Instance.SaveExtensionPackage(pkg);
             }
 
-            pkg = PackageController.GetPackageByName("DotNetNuke.ProfessionalPreview");
+            pkg = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.ProfessionalPreview");
             if (pkg != null)
             {
                 pkg.FolderName = "DesktopModules/Admin/ProfessionalPreview";
                 pkg.IconFile = "~/DesktopModules/Admin/ProfessionalPreview/professionalPreview.gif";
-                PackageController.UpdatePackage(pkg);
+                PackageController.Instance.SaveExtensionPackage(pkg);
             }
         }
 
@@ -874,13 +728,6 @@ namespace DotNetNuke.Services.Upgrade
             }
         }
 
-        private static int CountLegacyFiles()
-        {
-            return DataProvider.Instance().CountLegacyFiles();
-        }
-
-       
-
         /// -----------------------------------------------------------------------------
         /// <summary>
         /// CoreModuleExists determines whether a Core Module exists on the system
@@ -934,9 +781,9 @@ namespace DotNetNuke.Services.Upgrade
                     case "GoogleAnalytics":
                     case "Sitemap":
                     case "DotNetNuke.Taxonomy":
-                        foreach(ModuleDefinitionInfo definition in desktopModuleInfo.Value.ModuleDefinitions.Values)
+                        foreach (ModuleDefinitionInfo definition in desktopModuleInfo.Value.ModuleDefinitions.Values)
                         {
-                            foreach(ModuleControlInfo control in definition.ModuleControls.Values)
+                            foreach (ModuleControlInfo control in definition.ModuleControls.Values)
                             {
                                 if (!String.IsNullOrEmpty(control.ControlKey))
                                 {
@@ -949,9 +796,9 @@ namespace DotNetNuke.Services.Upgrade
                     default:
                         break;
                 }
-            }          
+            }
 
-            foreach(ModuleControlInfo control in ModuleControlController.GetModuleControlsByModuleDefinitionID(Null.NullInteger).Values)
+            foreach (ModuleControlInfo control in ModuleControlController.GetModuleControlsByModuleDefinitionID(Null.NullInteger).Values)
             {
                 control.SupportsPopUps = true;
                 ModuleControlController.SaveModuleControl(control, false);
@@ -978,12 +825,12 @@ namespace DotNetNuke.Services.Upgrade
                 HtmlUtils.WriteFeedback(HttpContext.Current.Response, 2, Localization.Localization.GetString("ExecutingScript", Localization.Localization.GlobalResourceFile) + ":" + Path.GetFileName(scriptFile));
             }
 
-             // read script file for installation
+            // read script file for installation
             string script = FileSystemUtils.ReadFile(scriptFile);
 
             // execute SQL installation script
             string exceptions = DataProvider.Instance().ExecuteScript(script);
-           
+
             //add installer logging
             if (string.IsNullOrEmpty(exceptions))
             {
@@ -991,7 +838,7 @@ namespace DotNetNuke.Services.Upgrade
             }
             else
             {
-				DnnInstallLogger.InstallLogError(exceptions);
+                DnnInstallLogger.InstallLogError(exceptions);
             }
 
             // log the results
@@ -1005,7 +852,7 @@ namespace DotNetNuke.Services.Upgrade
             }
             catch (Exception exc)
             {
-				//does not have permission to create the log file
+                //does not have permission to create the log file
                 Logger.Error(exc);
             }
 
@@ -1067,10 +914,9 @@ namespace DotNetNuke.Services.Upgrade
         private static bool HostTabExists(string tabName)
         {
             bool tabExists = false;
-            var tabController = new TabController();
-            var hostTab = tabController.GetTabByName("Host", Null.NullInteger);
+            var hostTab = TabController.Instance.GetTabByName("Host", Null.NullInteger);
 
-            var tab = tabController.GetTabByName(tabName, Null.NullInteger, hostTab.TabID);
+            var tab = TabController.Instance.GetTabByName(tabName, Null.NullInteger, hostTab.TabID);
             if ((tab != null))
             {
                 tabExists = true;
@@ -1086,8 +932,8 @@ namespace DotNetNuke.Services.Upgrade
         /// </summary>
         /// <remarks>
         /// </remarks>
-		///	<param name="providerPath">The Path to the Provider Directory</param>
-		/// <param name="writeFeedback">Whether need to output feedback message.</param>
+        ///	<param name="providerPath">The Path to the Provider Directory</param>
+        /// <param name="writeFeedback">Whether need to output feedback message.</param>
         /// <history>
         /// 	[cnurse]	02/02/2005	created
         /// </history>
@@ -1127,7 +973,7 @@ namespace DotNetNuke.Services.Upgrade
             }
             else
             {
-				DnnInstallLogger.InstallLogError(exceptions);
+                DnnInstallLogger.InstallLogError(exceptions);
             }
 
             return exceptions;
@@ -1165,7 +1011,7 @@ namespace DotNetNuke.Services.Upgrade
             }
             catch (Exception exc)
             {
-				//does not have permission to create the log file
+                //does not have permission to create the log file
                 Logger.Error(exc);
             }
 
@@ -1206,7 +1052,7 @@ namespace DotNetNuke.Services.Upgrade
                         string folder = XmlUtils.GetNodeValue(fileNode.CreateNavigator(), "folder");
 
                         var folderInfo = folderManager.GetFolder(portalId, folder);
-                        var file = new FileInfo(portalId, fileName, extension, (int) size, width, height, contentType, folder, folderInfo.FolderID, folderInfo.StorageLocation, true);
+                        var file = new FileInfo(portalId, fileName, extension, (int)size, width, height, contentType, folder, folderInfo.FolderID, folderInfo.StorageLocation, true);
 
                         using (var fileContent = fileManager.GetFileContent(file))
                         {
@@ -1233,7 +1079,7 @@ namespace DotNetNuke.Services.Upgrade
         ///	<param name="desktopModuleName">The Friendly Name of the Module to Remove</param>
         ///	<param name="parentTabName">The Name of the parent Tab/Page for this module</param>
         ///	<param name="tabName">The Name to tab that contains the Module</param>
-		///	<param name="removeTab">A flag to determine whether to remove the Tab if it has no
+        ///	<param name="removeTab">A flag to determine whether to remove the Tab if it has no
         ///	other modules</param>
         /// <history>
         /// 	[cnurse]	10/14/2004	documented
@@ -1250,8 +1096,7 @@ namespace DotNetNuke.Services.Upgrade
             switch (parentTabName)
             {
                 case "Host":
-                    var tabController = new TabController();
-                    var tab = tabController.GetTabByName("Host", Null.NullInteger, Null.NullInteger);
+                    var tab = TabController.Instance.GetTabByName("Host", Null.NullInteger, Null.NullInteger);
 
                     if (tab != null)
                     {
@@ -1259,15 +1104,12 @@ namespace DotNetNuke.Services.Upgrade
                     }
                     break;
                 case "Admin":
-                    var portalController = new PortalController();
-                    PortalInfo portal;
-
-                    var portals = portalController.GetPortals();
+                    var portals = PortalController.Instance.GetPortals();
 
                     //Iterate through the Portals to remove the Module from the Tab
                     for (int intPortal = 0; intPortal <= portals.Count - 1; intPortal++)
                     {
-                        portal = (PortalInfo) portals[intPortal];
+                        var portal = (PortalInfo)portals[intPortal];
                         moduleDefId = RemoveModule(desktopModuleName, tabName, portal.AdminTabId, removeTab);
                     }
                     break;
@@ -1297,29 +1139,27 @@ namespace DotNetNuke.Services.Upgrade
                 desktopModuleController.DeleteDesktopModule(desktopModuleId);
 
                 //Delete the Package
-                PackageController.DeletePackage(desktopModule.PackageID);
+                PackageController.Instance.DeleteExtensionPackage(PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.PackageID == desktopModule.PackageID));
             }
         }
 
         private static int RemoveModule(string desktopModuleName, string tabName, int parentId, bool removeTab)
         {
             DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogStart", Localization.Localization.GlobalResourceFile) + "RemoveModule:" + desktopModuleName);
-            var tabController = new TabController();
-            var moduleController = new ModuleController();
-            TabInfo tab = tabController.GetTabByName(tabName, Null.NullInteger, parentId);
+            TabInfo tab = TabController.Instance.GetTabByName(tabName, Null.NullInteger, parentId);
             int moduleDefId = 0;
             int count = 0;
 
             //Get the Modules on the Tab
             if (tab != null)
             {
-                foreach (KeyValuePair<int, ModuleInfo> kvp in moduleController.GetTabModules(tab.TabID))
+                foreach (KeyValuePair<int, ModuleInfo> kvp in ModuleController.Instance.GetTabModules(tab.TabID))
                 {
                     var module = kvp.Value;
                     if (module.DesktopModule.FriendlyName == desktopModuleName)
                     {
                         //Delete the Module from the Modules list
-                        moduleController.DeleteTabModule(module.TabID, module.ModuleID, false);
+                        ModuleController.Instance.DeleteTabModule(module.TabID, module.ModuleID, false);
                         moduleDefId = module.ModuleDefID;
                     }
                     else
@@ -1331,7 +1171,7 @@ namespace DotNetNuke.Services.Upgrade
                 //If Tab has no modules optionally remove tab
                 if (count == 0 && removeTab)
                 {
-                    tabController.DeleteTab(tab.TabID, tab.PortalID);
+                    TabController.Instance.DeleteTab(tab.TabID, tab.PortalID);
                 }
             }
 
@@ -1376,19 +1216,19 @@ namespace DotNetNuke.Services.Upgrade
         {
             DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogStart", Localization.Localization.GlobalResourceFile) + "FavIconsToPortalSettings");
             const string fileName = "favicon.ico";
-            var portals = new PortalController().GetPortals().Cast<PortalInfo>();
+            var portals = PortalController.Instance.GetPortals().Cast<PortalInfo>();
 
             foreach (var portalInfo in portals)
             {
                 string localPath = Path.Combine(portalInfo.HomeDirectoryMapPath, fileName);
 
-                if(File.Exists(localPath))
+                if (File.Exists(localPath))
                 {
                     try
                     {
                         int fileId;
                         var folder = FolderManager.Instance.GetFolder(portalInfo.PortalID, "");
-                        if( ! FileManager.Instance.FileExists(folder, fileName))
+                        if (!FileManager.Instance.FileExists(folder, fileName))
                         {
                             using (var stream = File.OpenRead(localPath))
                             {
@@ -1396,19 +1236,17 @@ namespace DotNetNuke.Services.Upgrade
                             }
                         }
                         fileId = FileManager.Instance.GetFile(folder, fileName).FileId;
-                        
+
                         new FavIcon(portalInfo.PortalID).Update(fileId);
                     }
                     catch (Exception e)
                     {
                         string message = string.Format("Unable to setup Favicon for Portal: {0}", portalInfo.PortalName);
-                        var controller = new EventLogController();
-                        var info = new LogInfo();
-                        info.LogTypeKey = EventLogController.EventLogType.ADMIN_ALERT.ToString();
-                        info.AddProperty("Issue", message);
-                        info.AddProperty("ExceptionMessage", e.Message);
-                        info.AddProperty("StackTrace", e.StackTrace);
-                        controller.AddLog(info);
+                        var log = new LogInfo {LogTypeKey = EventLogController.EventLogType.ADMIN_ALERT.ToString()};
+                        log.AddProperty("Issue", message);
+                        log.AddProperty("ExceptionMessage", e.Message);
+                        log.AddProperty("StackTrace", e.StackTrace);
+                        LogController.Instance.AddLog(log);
 
                         Logger.Warn(message, e);
                     }
@@ -1426,16 +1264,14 @@ namespace DotNetNuke.Services.Upgrade
         private static void UpgradeToVersion323()
         {
             //add new SecurityException
-            var logController = new LogController();
             string configFile = Globals.HostMapPath + "Logs\\LogConfig\\SecurityExceptionTemplate.xml.resources";
-            logController.AddLogType(configFile, Null.NullString);
+            LogController.Instance.AddLogType(configFile, Null.NullString);
         }
 
         private static void UpgradeToVersion440()
         {
             // remove module cache files with *.htm extension ( they are now securely named *.resources )
-            var portalController = new PortalController();
-            var portals = portalController.GetPortals();
+            var portals = PortalController.Instance.GetPortals();
             foreach (PortalInfo objPortal in portals)
             {
                 if (Directory.Exists(Globals.ApplicationMapPath + "\\Portals\\" + objPortal.PortalID + "\\Cache\\"))
@@ -1454,8 +1290,7 @@ namespace DotNetNuke.Services.Upgrade
             string hostTemplateFile = Globals.HostMapPath + "Templates\\Default.page.template";
             if (File.Exists(hostTemplateFile))
             {
-                var portalController = new PortalController();
-                ArrayList portals = portalController.GetPortals();
+                ArrayList portals = PortalController.Instance.GetPortals();
                 foreach (PortalInfo portal in portals)
                 {
                     string portalTemplateFolder = portal.HomeDirectoryMapPath + "Templates\\";
@@ -1486,9 +1321,7 @@ namespace DotNetNuke.Services.Upgrade
 
         private static void UpgradeToVersion500()
         {
-            var portalController = new PortalController();
-            ArrayList portals = portalController.GetPortals();
-            var tabController = new TabController();
+            ArrayList portals = PortalController.Instance.GetPortals();
 
             //Add Edit Permissions for Admin Tabs to legacy portals
             var permissionController = new PermissionController();
@@ -1504,10 +1337,10 @@ namespace DotNetNuke.Services.Upgrade
 
                 foreach (PortalInfo portal in portals)
                 {
-                    var adminTab = tabController.GetTab(portal.AdminTabId, portal.PortalID, true);
+                    var adminTab = TabController.Instance.GetTab(portal.AdminTabId, portal.PortalID, true);
                     if (adminTab != null)
                     {
-                        var tabPermission = new TabPermissionInfo {TabID = adminTab.TabID, PermissionID = permissionId, AllowAccess = true, RoleID = portal.AdministratorRoleId};
+                        var tabPermission = new TabPermissionInfo { TabID = adminTab.TabID, PermissionID = permissionId, AllowAccess = true, RoleID = portal.AdministratorRoleId };
                         if (!TabPermissionExists(tabPermission, portal.PortalID))
                         {
                             adminTab.TabPermissions.Add(tabPermission);
@@ -1518,7 +1351,7 @@ namespace DotNetNuke.Services.Upgrade
 
                         foreach (var childTab in TabController.GetTabsByParent(portal.AdminTabId, portal.PortalID))
                         {
-                            tabPermission = new TabPermissionInfo {TabID = childTab.TabID, PermissionID = permissionId, AllowAccess = true, RoleID = portal.AdministratorRoleId};
+                            tabPermission = new TabPermissionInfo { TabID = childTab.TabID, PermissionID = permissionId, AllowAccess = true, RoleID = portal.AdministratorRoleId };
                             if (!TabPermissionExists(tabPermission, portal.PortalID))
                             {
                                 childTab.TabPermissions.Add(tabPermission);
@@ -1532,7 +1365,6 @@ namespace DotNetNuke.Services.Upgrade
 
             //Update Host/Admin modules Visibility setting
             bool superTabProcessed = Null.NullBoolean;
-            var moduleController = new ModuleController();
             foreach (PortalInfo portal in portals)
             {
                 if (!superTabProcessed)
@@ -1540,10 +1372,10 @@ namespace DotNetNuke.Services.Upgrade
                     //Process Host Tabs
                     foreach (TabInfo childTab in TabController.GetTabsByParent(portal.SuperTabId, Null.NullInteger))
                     {
-                        foreach (ModuleInfo tabModule in moduleController.GetTabModules(childTab.TabID).Values)
+                        foreach (ModuleInfo tabModule in ModuleController.Instance.GetTabModules(childTab.TabID).Values)
                         {
                             tabModule.Visibility = VisibilityState.None;
-                            moduleController.UpdateModule(tabModule);
+                            ModuleController.Instance.UpdateModule(tabModule);
                         }
                     }
                 }
@@ -1551,10 +1383,10 @@ namespace DotNetNuke.Services.Upgrade
                 //Process Portal Tabs
                 foreach (TabInfo childTab in TabController.GetTabsByParent(portal.AdminTabId, portal.PortalID))
                 {
-                    foreach (ModuleInfo tabModule in moduleController.GetTabModules(childTab.TabID).Values)
+                    foreach (ModuleInfo tabModule in ModuleController.Instance.GetTabModules(childTab.TabID).Values)
                     {
                         tabModule.Visibility = VisibilityState.None;
-                        moduleController.UpdateModule(tabModule);
+                        ModuleController.Instance.UpdateModule(tabModule);
                     }
                 }
             }
@@ -1581,7 +1413,7 @@ namespace DotNetNuke.Services.Upgrade
                             // if Not IsAdmin add Registered Users
                             if (!desktopModule.IsAdmin)
                             {
-                                deployPermission = new DesktopModulePermissionInfo {PermissionID = permissionId, AllowAccess = true, RoleID = portal.RegisteredRoleId};
+                                deployPermission = new DesktopModulePermissionInfo { PermissionID = permissionId, AllowAccess = true, RoleID = portal.RegisteredRoleId };
                                 deployPermissions.Add(deployPermission);
                             }
 
@@ -1589,7 +1421,7 @@ namespace DotNetNuke.Services.Upgrade
                             const string hostModules = "Portals, SQL, HostSettings, Scheduler, SearchAdmin, Lists, SkinDesigner, Extensions";
                             if (!hostModules.Contains(desktopModule.ModuleName))
                             {
-                                deployPermission = new DesktopModulePermissionInfo {PermissionID = permissionId, AllowAccess = true, RoleID = portal.AdministratorRoleId};
+                                deployPermission = new DesktopModulePermissionInfo { PermissionID = permissionId, AllowAccess = true, RoleID = portal.AdministratorRoleId };
                                 deployPermissions.Add(deployPermission);
                             }
 
@@ -1611,16 +1443,12 @@ namespace DotNetNuke.Services.Upgrade
         private static void UpgradeToVersion501()
         {
             //add new Cache Error Event Type
-            var logController = new LogController();
             string configFile = string.Format("{0}Logs\\LogConfig\\CacheErrorTemplate.xml.resources", Globals.HostMapPath);
-            logController.AddLogType(configFile, Null.NullString);
+            LogController.Instance.AddLogType(configFile, Null.NullString);
         }
 
         private static void UpgradeToVersion510()
         {
-            var portalController = new PortalController();
-            var tabController = new TabController();
-            var moduleController = new ModuleController();
             int moduleDefId;
 
             //add Dashboard module and tab
@@ -1682,20 +1510,20 @@ namespace DotNetNuke.Services.Upgrade
             DesktopModuleController.DeleteDesktopModule("Module Definition Validator");
 
             //Get Module Definitions
-            TabInfo definitionsPage = tabController.GetTabByName("Module Definitions", Null.NullInteger);
+            TabInfo definitionsPage = TabController.Instance.GetTabByName("Module Definitions", Null.NullInteger);
 
             //Add Module To Page if not present
             int moduleId = AddModuleToPage(definitionsPage, moduleDefId, "Module Definitions", "~/images/icon_moduledefinitions_32px.gif");
-            moduleController.UpdateModuleSetting(moduleId, "Extensions_Mode", "Module");
+            ModuleController.Instance.UpdateModuleSetting(moduleId, "Extensions_Mode", "Module");
 
             //Add Extensions Host Page
             TabInfo extensionsPage = AddHostPage("Extensions", "Install, add, modify and delete extensions, such as modules, skins and language packs.", "~/images/icon_extensions_16px.gif", "~/images/icon_extensions_32px.png", true);
 
             moduleId = AddModuleToPage(extensionsPage, moduleDefId, "Extensions", "~/images/icon_extensions_32px.png");
-            moduleController.UpdateModuleSetting(moduleId, "Extensions_Mode", "All");
+            ModuleController.Instance.UpdateModuleSetting(moduleId, "Extensions_Mode", "All");
 
             //Add Extensions Module to Admin Page for all Portals
-            AddAdminPages("Extensions", "Install, add, modify and delete extensions, such as modules, skins and language packs.", "~/images/icon_extensions_16px.gif", "~/images/icon_extensions_32px.png", true, moduleDefId, "Extensions", "~/images/icon_extensions_32px.png"); 
+            AddAdminPages("Extensions", "Install, add, modify and delete extensions, such as modules, skins and language packs.", "~/images/icon_extensions_16px.gif", "~/images/icon_extensions_32px.png", true, moduleDefId, "Extensions", "~/images/icon_extensions_32px.png");
 
             //Remove Host Languages Page
             RemoveHostPage("Languages");
@@ -1717,7 +1545,7 @@ namespace DotNetNuke.Services.Upgrade
             AddModuleControl(moduleDefId, "PackageWriter", "Language Pack Writer", "DesktopModules/Admin/Languages/LanguagePackWriter.ascx", "", SecurityAccessLevel.Host, 0);
 
             //Add Module to Admin Page for all Portals
-            AddAdminPages("Languages", "Manage Language Resources.", "~/images/icon_language_16px.gif", "~/images/icon_language_32px.gif", true, moduleDefId, "Language Editor", "~/images/icon_language_32px.gif"); 
+            AddAdminPages("Languages", "Manage Language Resources.", "~/images/icon_language_16px.gif", "~/images/icon_language_32px.gif", true, moduleDefId, "Language Editor", "~/images/icon_language_32px.gif");
 
             //Remove Host Skins Page
             RemoveHostPage("Skins");
@@ -1769,7 +1597,7 @@ namespace DotNetNuke.Services.Upgrade
             //add console settings for host page
             if ((tabId != Null.NullInteger))
             {
-                tab = tabController.GetTab(tabId, Null.NullInteger, true);
+                tab = TabController.Instance.GetTab(tabId, Null.NullInteger, true);
                 if (((tab != null)))
                 {
                     AddConsoleModuleSettings(moduleId);
@@ -1777,12 +1605,12 @@ namespace DotNetNuke.Services.Upgrade
             }
 
             //add module to all admin pages
-            foreach (PortalInfo portal in portalController.GetPortals())
+            foreach (PortalInfo portal in PortalController.Instance.GetPortals())
             {
                 tabId = TabController.GetTabByTabPath(portal.PortalID, "//Admin", Null.NullString);
                 if ((tabId != Null.NullInteger))
                 {
-                    tab = tabController.GetTab(tabId, portal.PortalID, true);
+                    tab = TabController.Instance.GetTab(tabId, portal.PortalID, true);
                     if (((tab != null)))
                     {
                         moduleId = AddModuleToPage(tab, moduleDefId, "Basic Features", "", true);
@@ -1794,7 +1622,7 @@ namespace DotNetNuke.Services.Upgrade
             //Add Google Analytics module
             moduleDefId = AddModuleDefinition("Google Analytics", "Configure Site Google Analytics settings.", "GoogleAnalytics", false, false);
             AddModuleControl(moduleDefId, "", "Google Analytics", "DesktopModules/Admin/Analytics/GoogleAnalyticsSettings.ascx", "", SecurityAccessLevel.Admin, 0);
-            AddAdminPages("Google Analytics", "Configure Site Google Analytics settings.", "~/images/icon_analytics_16px.gif", "~/images/icon_analytics_32px.gif", true, moduleDefId, "Google Analytics", "~/images/icon_analytics_32px.gif"); 
+            AddAdminPages("Google Analytics", "Configure Site Google Analytics settings.", "~/images/icon_analytics_16px.gif", "~/images/icon_analytics_32px.gif", true, moduleDefId, "Google Analytics", "~/images/icon_analytics_32px.gif");
         }
 
         private static void UpgradeToVersion511()
@@ -1814,7 +1642,7 @@ namespace DotNetNuke.Services.Upgrade
             Localization.Localization.SaveLanguage(defaultLanguage);
 
             //Ensure that there is a Default Authorization System
-            var package = PackageController.GetPackageByName("DefaultAuthentication");
+            var package = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DefaultAuthentication");
             if (package == null)
             {
                 package = new PackageInfo
@@ -1824,15 +1652,15 @@ namespace DotNetNuke.Services.Upgrade
                                   Description = "The Default UserName/Password Authentication System for DotNetNuke.",
                                   PackageType = "Auth_System",
                                   Version = new Version(1, 0, 0),
-                                  Owner = "DotNetNuke",
+                                  Owner = "DNN",
                                   License = Localization.Localization.GetString("License", Localization.Localization.GlobalResourceFile),
-                                  Organization = "DotNetNuke Corporation",
-                                  Url = "www.dotnetnuke.com",
-                                  Email = "support@dotnetnuke.com",
+                                  Organization = "DNN Corp.",
+                                  Url = "http://www.dnnsoftware.com",
+                                  Email = "support@dnnsoftware.com",
                                   ReleaseNotes = "There are no release notes for this version.",
                                   IsSystemPackage = true
                               };
-                PackageController.SavePackage(package);
+                PackageController.Instance.SaveExtensionPackage(package);
 
                 //Add Authentication System
                 var authSystem = AuthenticationController.GetAuthenticationServiceByType("DNN") ?? new AuthenticationInfo();
@@ -1895,7 +1723,7 @@ namespace DotNetNuke.Services.Upgrade
             //Add new Sitemap settings module
             moduleDefId = AddModuleDefinition("Sitemap", "", "Sitemap", false, false);
             AddModuleControl(moduleDefId, "", "", "DesktopModules/Admin/Sitemap/SitemapSettings.ascx", "~/images/icon_analytics_32px.gif", SecurityAccessLevel.View, 0);
-            AddAdminPages("Search Engine Sitemap", "Configure the sitemap for submission to common search engines.", "~/images/icon_analytics_16px.gif", "~/images/icon_analytics_32px.gif", true, moduleDefId, "Search Engine Sitemap", "~/images/icon_analytics_32px.gif"); 
+            AddAdminPages("Search Engine Sitemap", "Configure the sitemap for submission to common search engines.", "~/images/icon_analytics_16px.gif", "~/images/icon_analytics_32px.gif", true, moduleDefId, "Search Engine Sitemap", "~/images/icon_analytics_32px.gif");
 
 
             //Add new Photo Profile field to Host
@@ -1903,7 +1731,7 @@ namespace DotNetNuke.Services.Upgrade
             Dictionary<string, ListEntryInfo> dataTypes = listController.GetListEntryInfoDictionary("DataType");
 
             var properties = ProfileController.GetPropertyDefinitionsByPortal(Null.NullInteger);
-            ProfileController.AddDefaultDefinition(Null.NullInteger, "Preferences", "Photo", "Image", 0, properties.Count*2 + 2, UserVisibilityMode.AllUsers, dataTypes);
+            ProfileController.AddDefaultDefinition(Null.NullInteger, "Preferences", "Photo", "Image", 0, properties.Count * 2 + 2, UserVisibilityMode.AllUsers, dataTypes);
 
             string installTemplateFile = string.Format("{0}Template\\UserProfile.page.template", Globals.InstallMapPath);
             string hostTemplateFile = string.Format("{0}Templates\\UserProfile.page.template", Globals.HostMapPath);
@@ -1916,15 +1744,13 @@ namespace DotNetNuke.Services.Upgrade
             }
             if (File.Exists(hostTemplateFile))
             {
-                var tabController = new TabController();
-                var portalController = new PortalController();
-                ArrayList portals = portalController.GetPortals();
+                ArrayList portals = PortalController.Instance.GetPortals();
                 foreach (PortalInfo portal in portals)
                 {
                     properties = ProfileController.GetPropertyDefinitionsByPortal(portal.PortalID);
 
                     //Add new Photo Profile field to Portal
-                    ProfileController.AddDefaultDefinition(portal.PortalID, "Preferences", "Photo", "Image", 0, properties.Count*2 + 2, UserVisibilityMode.AllUsers, dataTypes);
+                    ProfileController.AddDefaultDefinition(portal.PortalID, "Preferences", "Photo", "Image", 0, properties.Count * 2 + 2, UserVisibilityMode.AllUsers, dataTypes);
 
                     //Rename old Default Page template
                     string defaultPageTemplatePath = string.Format("{0}Templates\\Default.page.template", portal.HomeDirectoryMapPath);
@@ -1934,10 +1760,10 @@ namespace DotNetNuke.Services.Upgrade
                     }
 
                     //Update Default profile template in every portal
-                    portalController.CopyPageTemplate("Default.page.template", portal.HomeDirectoryMapPath);
+                    PortalController.Instance.CopyPageTemplate("Default.page.template", portal.HomeDirectoryMapPath);
 
                     //Add User profile template to every portal
-                    portalController.CopyPageTemplate("UserProfile.page.template", portal.HomeDirectoryMapPath);
+                    PortalController.Instance.CopyPageTemplate("UserProfile.page.template", portal.HomeDirectoryMapPath);
 
                     //Synchronize the Templates folder to ensure the templates are accessible
                     FolderManager.Instance.Synchronize(portal.PortalID, "Templates/", false, true);
@@ -1958,7 +1784,7 @@ namespace DotNetNuke.Services.Upgrade
                     {
                         string tabName = XmlUtils.GetNodeValue(userTabNode.CreateNavigator(), "name");
 
-                        var userTab = tabController.GetTabByName(tabName, portal.PortalID) ?? TabController.DeserializeTab(userTabNode, null, portal.PortalID, PortalTemplateModuleAction.Merge);
+                        var userTab = TabController.Instance.GetTabByName(tabName, portal.PortalID) ?? TabController.DeserializeTab(userTabNode, null, portal.PortalID, PortalTemplateModuleAction.Merge);
 
                         //Update SiteSettings to point to the new page
                         if (portal.UserTabId > Null.NullInteger)
@@ -1970,7 +1796,7 @@ namespace DotNetNuke.Services.Upgrade
                             portal.UserTabId = userTab.TabID;
                         }
                     }
-                    portalController.UpdatePortalInfo(portal);
+                    PortalController.Instance.UpdatePortalInfo(portal);
 
                     //Add Users folder to every portal
                     string usersFolder = string.Format("{0}Users\\", portal.HomeDirectoryMapPath);
@@ -2004,14 +1830,13 @@ namespace DotNetNuke.Services.Upgrade
             {
                 //attempt to remove "System.Web.Extensions" configuration section
                 string upgradeFile = string.Format("{0}\\Config\\SystemWebExtensions.config", Globals.InstallMapPath);
-                string message = UpdateConfig(upgradeFile, DotNetNukeContext.Current.Application.Version, "Remove System.Web.Extensions");
-                var eventLogController = new EventLogController();
-                eventLogController.AddLog("UpgradeConfig",
+                string message = UpdateConfig(upgradeFile, ApplicationVersion, "Remove System.Web.Extensions");
+                EventLogController.Instance.AddLog("UpgradeConfig",
                                           string.IsNullOrEmpty(message)
                                               ? "Remove System Web Extensions"
                                               : string.Format("Remove System Web Extensions failed. Error reported during attempt to update:{0}", message),
-                                          PortalController.GetCurrentPortalSettings(),
-                                          UserController.GetCurrentUserInfo().UserID,
+                                          PortalController.Instance.GetCurrentPortalSettings(),
+                                          UserController.Instance.GetCurrentUserInfo().UserID,
                                           EventLogController.EventLogType.HOST_ALERT);
             }
 
@@ -2023,17 +1848,15 @@ namespace DotNetNuke.Services.Upgrade
             AddModuleControl(moduleDefId, "", "", "DesktopModules/Admin/ContentList/ContentList.ascx", "", SecurityAccessLevel.View, 0);
 
             //Update registration page
-            var portalController = new PortalController();
-            ArrayList portals = portalController.GetPortals();
+            ArrayList portals = PortalController.Instance.GetPortals();
             foreach (PortalInfo portal in portals)
             {
                 //objPortal.RegisterTabId = objPortal.UserTabId;
-                portalController.UpdatePortalInfo(portal);
+                PortalController.Instance.UpdatePortalInfo(portal);
 
                 //Add ContentList to Search Results Page
-                var tabController = new TabController();
                 int tabId = TabController.GetTabByTabPath(portal.PortalID, "//SearchResults", Null.NullString);
-                TabInfo searchPage = tabController.GetTab(tabId, portal.PortalID, false);
+                TabInfo searchPage = TabController.Instance.GetTab(tabId, portal.PortalID, false);
                 AddModuleToPage(searchPage, moduleDefId, "Results", "");
             }
         }
@@ -2078,8 +1901,7 @@ namespace DotNetNuke.Services.Upgrade
             }
 
             //Fix the permission for User Folders
-            var portalController = new PortalController();
-            foreach (PortalInfo portal in portalController.GetPortals())
+            foreach (PortalInfo portal in PortalController.Instance.GetPortals())
             {
                 foreach (FolderInfo folder in FolderManager.Instance.GetFolders(portal.PortalID))
                 {
@@ -2093,7 +1915,7 @@ namespace DotNetNuke.Services.Upgrade
                                 int roleId = Int32.Parse(Globals.glbRoleAllUsers);
                                 if (!folder.FolderPermissions.Contains(permission.PermissionKey, folder.FolderID, roleId, Null.NullInteger))
                                 {
-                                    var folderPermission = new FolderPermissionInfo(permission) {FolderID = folder.FolderID, UserID = Null.NullInteger, RoleID = roleId, AllowAccess = true};
+                                    var folderPermission = new FolderPermissionInfo(permission) { FolderID = folder.FolderID, UserID = Null.NullInteger, RoleID = roleId, AllowAccess = true };
 
                                     folder.FolderPermissions.Add(folderPermission);
                                 }
@@ -2120,7 +1942,7 @@ namespace DotNetNuke.Services.Upgrade
             }
 
 
-            foreach (PortalInfo portal in new PortalController().GetPortals())
+            foreach (PortalInfo portal in PortalController.Instance.GetPortals())
             {
                 //fix issue where portal default language may be disabled
                 string defaultLanguage = portal.DefaultLanguage;
@@ -2142,7 +1964,7 @@ namespace DotNetNuke.Services.Upgrade
             //Add .htmtemplate file extension
             var toAdd = new List<string> { ".htmtemplate" };
             HostController.Instance.Update("FileExtensions", Host.AllowedExtensionWhitelist.ToStorageString(toAdd));
-            
+
             //Add new Xml Merge module
             int moduleDefId = AddModuleDefinition("Configuration Manager", "", "Configuration Manager", false, false);
             AddModuleControl(moduleDefId, "", "", "DesktopModules/Admin/XmlMerge/XmlMerge.ascx", "~/images/icon_configuration_32px.png", SecurityAccessLevel.Host, 0);
@@ -2169,7 +1991,7 @@ namespace DotNetNuke.Services.Upgrade
             Dictionary<string, ListEntryInfo> dataTypes = listController.GetListEntryInfoDictionary("DataType");
 
             var properties = ProfileController.GetPropertyDefinitionsByPortal(Null.NullInteger);
-            ProfileController.AddDefaultDefinition(Null.NullInteger, "Preferences", "Photo", "Image", 0, properties.Count*2 + 2, UserVisibilityMode.AllUsers, dataTypes);
+            ProfileController.AddDefaultDefinition(Null.NullInteger, "Preferences", "Photo", "Image", 0, properties.Count * 2 + 2, UserVisibilityMode.AllUsers, dataTypes);
 
             HostController.Instance.Update("AutoAddPortalAlias", Globals.Status == Globals.UpgradeStatus.Install ? "Y" : "N");
 
@@ -2323,30 +2145,26 @@ namespace DotNetNuke.Services.Upgrade
 
         private static void UpgradeToVersion600()
         {
-            var tabController = new TabController();
-
-            var hostPages = tabController.GetTabsByPortal(Null.NullInteger);
+            var hostPages = TabController.Instance.GetTabsByPortal(Null.NullInteger);
 
             //This ensures that all host pages have a tab path.
             //so they can be found later. (DNNPRO-17129)
             foreach (var hostPage in hostPages.Values)
             {
                 hostPage.TabPath = Globals.GenerateTabPath(hostPage.ParentId, hostPage.TabName);
-                tabController.UpdateTab(hostPage);
+                TabController.Instance.UpdateTab(hostPage);
             }
 
-            var settings = PortalController.GetCurrentPortalSettings();
-
-            var moduleController = new ModuleController();
+            var settings = PortalController.Instance.GetCurrentPortalSettings();
 
             if (settings != null)
             {
-                var hostTab = tabController.GetTab(settings.SuperTabId, Null.NullInteger, false);
+                var hostTab = TabController.Instance.GetTab(settings.SuperTabId, Null.NullInteger, false);
                 hostTab.IsVisible = false;
-                tabController.UpdateTab(hostTab);
-                foreach (var module in moduleController.GetTabModules(settings.SuperTabId).Values)
+                TabController.Instance.UpdateTab(hostTab);
+                foreach (var module in ModuleController.Instance.GetTabModules(settings.SuperTabId).Values)
                 {
-                    moduleController.UpdateTabModuleSetting(module.TabModuleID, "hideadminborder", "true");
+                    ModuleController.Instance.UpdateTabModuleSetting(module.TabModuleID, "hideadminborder", "true");
                 }
             }
 
@@ -2361,12 +2179,11 @@ namespace DotNetNuke.Services.Upgrade
                 ProfileController.DeletePropertyDefinition(ppdHostTimeZone);
             }
 
-            var portalController = new PortalController();
-            foreach (PortalInfo portal in portalController.GetPortals())
+            foreach (PortalInfo portal in PortalController.Instance.GetPortals())
             {
                 //update timezoneinfo
 #pragma warning disable 612,618
-                TimeZoneInfo timeZoneInfo = Localization.Localization.ConvertLegacyTimeZoneOffsetToTimeZoneInfo(portal.TimeZoneOffset);                
+                TimeZoneInfo timeZoneInfo = Localization.Localization.ConvertLegacyTimeZoneOffsetToTimeZoneInfo(portal.TimeZoneOffset);
 #pragma warning restore 612,618
                 PortalController.UpdatePortalSetting(portal.PortalID, "TimeZone", timeZoneInfo.Id, false);
 
@@ -2377,24 +2194,23 @@ namespace DotNetNuke.Services.Upgrade
                     ProfileController.DeletePropertyDefinition(ppdTimeZone);
                 }
 
-                var adminTab = tabController.GetTab(portal.AdminTabId, portal.PortalID, false);
+                var adminTab = TabController.Instance.GetTab(portal.AdminTabId, portal.PortalID, false);
 
                 adminTab.IsVisible = false;
-                tabController.UpdateTab(adminTab);
+                TabController.Instance.UpdateTab(adminTab);
 
-                foreach (var module in moduleController.GetTabModules(portal.AdminTabId).Values)
+                foreach (var module in ModuleController.Instance.GetTabModules(portal.AdminTabId).Values)
                 {
-                    moduleController.UpdateTabModuleSetting(module.TabModuleID, "hideadminborder", "true");
+                    ModuleController.Instance.UpdateTabModuleSetting(module.TabModuleID, "hideadminborder", "true");
                 }
             }
 
             //Ensure that Display Beta Notice setting is present
             var displayBetaNotice = Host.DisplayBetaNotice;
-            HostController.Instance.Update("DisplayBetaNotice", displayBetaNotice ? "Y": "N");
+            HostController.Instance.Update("DisplayBetaNotice", displayBetaNotice ? "Y" : "N");
 
             moduleDefId = GetModuleDefinition("Languages", "Languages");
             AddModuleControl(moduleDefId, "EnableContent", "Enable Localized Content", "DesktopModules/Admin/Languages/EnableLocalizedContent.ascx", "", SecurityAccessLevel.Host, 0, null, false);
-            AddProfessionalPreviewPages();
 
             AddDefaultModuleIcons();
 
@@ -2402,7 +2218,7 @@ namespace DotNetNuke.Services.Upgrade
 
             FavIconsToPortalSettings();
 
-            var tab = tabController.GetTabByName("Host", Null.NullInteger, Null.NullInteger);
+            var tab = TabController.Instance.GetTabByName("Host", Null.NullInteger, Null.NullInteger);
 
             if (tab != null)
             {
@@ -2414,12 +2230,12 @@ namespace DotNetNuke.Services.Upgrade
         private static void UpgradeToVersion601()
         {
             //List module needs to be available to Portals also
-            var pkg = PackageController.GetPackageByName("DotNetNuke.Lists");
+            var pkg = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.Lists");
             if (pkg != null)
             {
                 //List package is no longer a system package
-                pkg.IsSystemPackage = false; 
-                PackageController.UpdatePackage(pkg);
+                pkg.IsSystemPackage = false;
+                PackageController.Instance.SaveExtensionPackage(pkg);
 
                 //List desktop module is no longer premium or admin module
                 var desktopModule = DesktopModuleController.GetDesktopModuleByPackageID(pkg.PackageID);
@@ -2434,8 +2250,7 @@ namespace DotNetNuke.Services.Upgrade
                     var permission = permissions[0] as PermissionInfo;
                     if (permission != null)
                     {
-                        var portalController = new PortalController();
-                        foreach (PortalInfo portal in portalController.GetPortals())
+                        foreach (PortalInfo portal in PortalController.Instance.GetPortals())
                         {
                             //ensure desktop module is not present in the portal
                             var pdmi = DesktopModuleController.GetPortalDesktopModule(portal.PortalID, desktopModule.DesktopModuleID);
@@ -2443,7 +2258,7 @@ namespace DotNetNuke.Services.Upgrade
                             {
                                 //Parse the permissions
                                 var deployPermissions = new DesktopModulePermissionCollection();
-                                var deployPermission = new DesktopModulePermissionInfo {PermissionID = permission.PermissionID, AllowAccess = true, RoleID = portal.AdministratorRoleId};
+                                var deployPermission = new DesktopModulePermissionInfo { PermissionID = permission.PermissionID, AllowAccess = true, RoleID = portal.AdministratorRoleId };
                                 deployPermissions.Add(deployPermission);
 
                                 //Add Portal/Module to PortalDesktopModules
@@ -2451,7 +2266,7 @@ namespace DotNetNuke.Services.Upgrade
                             }
                         }
                     }
-                }                
+                }
             }
         }
 
@@ -2462,17 +2277,15 @@ namespace DotNetNuke.Services.Upgrade
             HostController.Instance.Update("FileExtensions", Host.AllowedExtensionWhitelist.ToStorageString(exts));
 
             //Fix the icons for SiteMap page
-            var portalController = new PortalController();
-            foreach (PortalInfo portal in portalController.GetPortals())
+            foreach (PortalInfo portal in PortalController.Instance.GetPortals())
             {
-                var tabController = new TabController();
-                var siteMap = tabController.GetTabByName("Search Engine SiteMap", portal.PortalID);
+                var siteMap = TabController.Instance.GetTabByName("Search Engine SiteMap", portal.PortalID);
 
                 if (siteMap != null)
                 {
                     siteMap.IconFile = "~/Icons/Sigma/Sitemap_16X16_Standard.png";
                     siteMap.IconFileLarge = "~/Icons/Sigma/Sitemap_32X32_Standard.png";
-                    tabController.UpdateTab(siteMap);
+                    TabController.Instance.UpdateTab(siteMap);
                 }
             }
         }
@@ -2491,18 +2304,16 @@ namespace DotNetNuke.Services.Upgrade
 
             EnableModalPopUps();
 
-            var tabController = new TabController();
-            var tab = tabController.GetTabByName("Portals", Null.NullInteger);
+            var tab = TabController.Instance.GetTabByName("Portals", Null.NullInteger);
             tab.TabName = "Site Management";
-            tabController.UpdateTab(tab);
+            TabController.Instance.UpdateTab(tab);
 
-            var moduleController = new ModuleController();
-            foreach (var module in moduleController.GetTabModules(tab.TabID).Values)
+            foreach (var module in ModuleController.Instance.GetTabModules(tab.TabID).Values)
             {
                 if (module.ModuleTitle == "Portals")
                 {
                     module.ModuleTitle = "Site Management";
-                    moduleController.UpdateModule(module);
+                    ModuleController.Instance.UpdateModule(module);
                 }
             }
 
@@ -2521,104 +2332,102 @@ namespace DotNetNuke.Services.Upgrade
                                 true);
             }
 
-			//update DotNetNuke.Portals' friend name to 'Sites'.
-        	var portalPackage = PackageController.GetPackageByName("DotNetNuke.Portals");
-			if(portalPackage != null)
-			{
-				portalPackage.FriendlyName = "Sites";
-				PackageController.SavePackage(portalPackage);
-			}
+            //update DotNetNuke.Portals' friend name to 'Sites'.
+            var portalPackage = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.Portals");
+            if (portalPackage != null)
+            {
+                portalPackage.FriendlyName = "Sites";
+                PackageController.Instance.SaveExtensionPackage(portalPackage);
+            }
 
-			//add mobile preview control
-			AddModuleControl(Null.NullInteger, "MobilePreview", "Mobile Preview", "DesktopModules/Admin/MobilePreview/Preview.ascx", string.Empty, SecurityAccessLevel.Admin, Null.NullInteger);
+            //add mobile preview control
+            AddModuleControl(Null.NullInteger, "MobilePreview", "Mobile Preview", "DesktopModules/Admin/MobilePreview/Preview.ascx", string.Empty, SecurityAccessLevel.Admin, Null.NullInteger);
         }
 
-		private static void UpgradeToVersion612()
-		{
-			//update DotNetNuke.Portals' friend name to 'Sites'.
-			var portalPackage = PackageController.GetPackageByName("DotNetNuke.Portals");
-			if (portalPackage != null)
-			{
-				portalPackage.FriendlyName = "Site Management";
-				portalPackage.Description =
-					"The Super User can manage the various parent and child sites within the install instance. This module allows you to add a new site, modify an existing site, and delete a site.";
-				PackageController.SavePackage(portalPackage);
-			}
+        private static void UpgradeToVersion612()
+        {
+            //update DotNetNuke.Portals' friend name to 'Sites'.
+            var portalPackage = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.Portals");
+            if (portalPackage != null)
+            {
+                portalPackage.FriendlyName = "Site Management";
+                portalPackage.Description =
+                    "The Super User can manage the various parent and child sites within the install instance. This module allows you to add a new site, modify an existing site, and delete a site.";
+                PackageController.Instance.SaveExtensionPackage(portalPackage);
+            }
 
-			//update 'Portal' to 'Sites' in package description.
-			portalPackage = PackageController.GetPackageByName("DotNetNuke.Tabs");
-			if (portalPackage != null)
-			{
-				portalPackage.Description =
-					"Administrators can manage the Pages within the site. This module allows you to create a new page, modify an existing page, delete pages, change the page order, and change the hierarchical page level.";
-				PackageController.SavePackage(portalPackage);
-			}
+            //update 'Portal' to 'Sites' in package description.
+            portalPackage = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.Tabs");
+            if (portalPackage != null)
+            {
+                portalPackage.Description =
+                    "Administrators can manage the Pages within the site. This module allows you to create a new page, modify an existing page, delete pages, change the page order, and change the hierarchical page level.";
+                PackageController.Instance.SaveExtensionPackage(portalPackage);
+            }
 
-			portalPackage = PackageController.GetPackageByName("DotNetNuke.Vendors");
-			if (portalPackage != null)
-			{
-				portalPackage.Description =
-					"Administrators can manage the Vendors and Banners associated to the site. This module allows you to add a new vendor, modify an existing vendor, and delete a vendor.";
-				PackageController.SavePackage(portalPackage);
-			}
+            portalPackage = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.Vendors");
+            if (portalPackage != null)
+            {
+                portalPackage.Description =
+                    "Administrators can manage the Vendors and Banners associated to the site. This module allows you to add a new vendor, modify an existing vendor, and delete a vendor.";
+                PackageController.Instance.SaveExtensionPackage(portalPackage);
+            }
 
-			portalPackage = PackageController.GetPackageByName("DotNetNuke.SiteLog");
-			if (portalPackage != null)
-			{
-				portalPackage.Description =
-					"Administrators can view the details of visitors using their site. There are a variety of reports available to display information regarding site usage, membership, and volumes.";
-				PackageController.SavePackage(portalPackage);
-			}
+            portalPackage = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.SiteLog");
+            if (portalPackage != null)
+            {
+                portalPackage.Description =
+                    "Administrators can view the details of visitors using their site. There are a variety of reports available to display information regarding site usage, membership, and volumes.";
+                PackageController.Instance.SaveExtensionPackage(portalPackage);
+            }
 
-			portalPackage = PackageController.GetPackageByName("DotNetNuke.SiteWizard");
-			if (portalPackage != null)
-			{
-				portalPackage.Description =
-					"The Administrator can use this user-friendly wizard to set up the common features of the site.";
-				PackageController.SavePackage(portalPackage);
-			}
+            portalPackage = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.SiteWizard");
+            if (portalPackage != null)
+            {
+                portalPackage.Description =
+                    "The Administrator can use this user-friendly wizard to set up the common features of the site.";
+                PackageController.Instance.SaveExtensionPackage(portalPackage);
+            }
 
-			portalPackage = PackageController.GetPackageByName("DotNetNuke.Security");
-			if (portalPackage != null)
-			{
-				portalPackage.Description =
-					"Administrators can manage the security roles defined for their site. The module allows you to add new security roles, modify existing security roles, delete security roles, and manage the users assigned to security roles.";
-				PackageController.SavePackage(portalPackage);
-			}
+            portalPackage = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.Security");
+            if (portalPackage != null)
+            {
+                portalPackage.Description =
+                    "Administrators can manage the security roles defined for their site. The module allows you to add new security roles, modify existing security roles, delete security roles, and manage the users assigned to security roles.";
+                PackageController.Instance.SaveExtensionPackage(portalPackage);
+            }
 
-			portalPackage = PackageController.GetPackageByName("DotNetNuke.LogViewer");
-			if (portalPackage != null)
-			{
-				portalPackage.Description =
-					"Allows you to view log entries for site events.";
-				PackageController.SavePackage(portalPackage);
-			}
+            portalPackage = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.LogViewer");
+            if (portalPackage != null)
+            {
+                portalPackage.Description =
+                    "Allows you to view log entries for site events.";
+                PackageController.Instance.SaveExtensionPackage(portalPackage);
+            }
 
-			portalPackage = PackageController.GetPackageByName("DotNetNuke.Google Analytics");
-			if (portalPackage != null)
-			{
-				portalPackage.Description =
-					"Configure Site Google Analytics settings.";
-				PackageController.SavePackage(portalPackage);
-			}
-		}
+            portalPackage = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.Google Analytics");
+            if (portalPackage != null)
+            {
+                portalPackage.Description =
+                    "Configure Site Google Analytics settings.";
+                PackageController.Instance.SaveExtensionPackage(portalPackage);
+            }
+        }
 
         private static void UpgradeToVersion613()
         {
             //Rename admin pages page's title to 'Page Management'.
-            var portalController = new PortalController();
-            foreach (PortalInfo portal in portalController.GetPortals())
+            foreach (PortalInfo portal in PortalController.Instance.GetPortals())
             {
-                var tabController = new TabController();
                 var pagesTabId = TabController.GetTabByTabPath(portal.PortalID, "//Admin//Pages", Null.NullString);
 
                 if (pagesTabId != Null.NullInteger)
                 {
-                    var pagesTab = tabController.GetTab(pagesTabId, portal.PortalID, false);
+                    var pagesTab = TabController.Instance.GetTab(pagesTabId, portal.PortalID, false);
                     if (pagesTab != null && pagesTab.Title == "Pages")
                     {
                         pagesTab.Title = "Page Management";
-                        tabController.UpdateTab(pagesTab);
+                        TabController.Instance.UpdateTab(pagesTab);
                     }
                 }
             }
@@ -2641,8 +2450,7 @@ namespace DotNetNuke.Services.Upgrade
             listController.AddListEntry(entry);
 
             //add same list to each portal
-            var portalController = new PortalController();
-            foreach (PortalInfo portal in portalController.GetPortals())
+            foreach (PortalInfo portal in PortalController.Instance.GetPortals())
             {
                 entry.PortalID = portal.PortalID;
                 entry.SystemList = false;
@@ -2678,18 +2486,16 @@ namespace DotNetNuke.Services.Upgrade
         private static void UpgradeToVersion621()
         {
             //update administrators' role description.
-            var portalController = new PortalController();
-            var moduleController = new ModuleController();
-            foreach (PortalInfo portal in portalController.GetPortals())
+            foreach (PortalInfo portal in PortalController.Instance.GetPortals())
             {
                 //update about me's template
                 var myProfileTabId = TabController.GetTabByTabPath(portal.PortalID, "//ActivityFeed//MyProfile", string.Empty);
                 if (myProfileTabId != Null.NullInteger)
                 {
-                    var tabModules = moduleController.GetTabModules(myProfileTabId);
+                    var tabModules = ModuleController.Instance.GetTabModules(myProfileTabId);
                     foreach (var module in tabModules.Values)
                     {
-                        var settings = moduleController.GetTabModuleSettings(module.TabModuleID);
+                        var settings = module.TabModuleSettings;
                         if (settings.ContainsKey("ProfileTemplate") && settings["ProfileTemplate"].ToString().Contains("<div class=\"pBio\">"))
                         {
                             var template = @"<div class=""pBio"">
@@ -2717,7 +2523,7 @@ namespace DotNetNuke.Services.Upgrade
                                     </ul>
                                     </div>
                                     <div class=""dnnClear""></div>";
-                            moduleController.UpdateTabModuleSetting(module.TabModuleID, "ProfileTemplate", template);
+                            ModuleController.Instance.UpdateTabModuleSetting(module.TabModuleID, "ProfileTemplate", template);
                         }
                     }
                 }
@@ -2749,12 +2555,12 @@ namespace DotNetNuke.Services.Upgrade
             {
                 var moduleDefId = AddModuleDefinition("AdvancedSettings", "", "Advanced Settings");
                 AddModuleControl(moduleDefId, "", "", "DesktopModules/Admin/AdvancedSettings/AdvancedSettings.ascx", "", SecurityAccessLevel.Admin, 0);
-				AddAdminPages("Advanced Settings", 
-                            "", 
-                            "~/Icons/Sigma/AdvancedSettings_16X16_Standard.png", 
-                            "~/Icons/Sigma/AdvancedSettings_32X32_Standard.png", 
-                            true, 
-                            moduleDefId, 
+                AddAdminPages("Advanced Settings",
+                            "",
+                            "~/Icons/Sigma/AdvancedSettings_16X16_Standard.png",
+                            "~/Icons/Sigma/AdvancedSettings_32X32_Standard.png",
+                            true,
+                            moduleDefId,
                             "Advanced Settings",
                             "~/Icons/Sigma/AdvancedSettings_16X16_Standard.png");
             }
@@ -2788,8 +2594,7 @@ namespace DotNetNuke.Services.Upgrade
             }
 
             //add list to each portal and update primary alias
-            var portalController = new PortalController();
-            foreach (PortalInfo portal in portalController.GetPortals())
+            foreach (PortalInfo portal in PortalController.Instance.GetPortals())
             {
                 entry.PortalID = portal.PortalID;
                 entry.SystemList = false;
@@ -2799,30 +2604,16 @@ namespace DotNetNuke.Services.Upgrade
                 var defaultAlias = PortalController.GetPortalSetting("DefaultPortalAlias", portal.PortalID, String.Empty);
                 if (!String.IsNullOrEmpty(defaultAlias))
                 {
-                    foreach (var alias in TestablePortalAliasController.Instance.GetPortalAliasesByPortalId(portal.PortalID).Where(alias => alias.HTTPAlias == defaultAlias))
+                    foreach (var alias in PortalAliasController.Instance.GetPortalAliasesByPortalId(portal.PortalID).Where(alias => alias.HTTPAlias == defaultAlias))
                     {
                         alias.IsPrimary = true;
-                        TestablePortalAliasController.Instance.UpdatePortalAlias(alias);
+                        PortalAliasController.Instance.UpdatePortalAlias(alias);
                     }
                 }
             }
 
-            int advancedFeaturesTabID = TabController.GetTabByTabPath(Null.NullInteger, "//Host//ProfessionalFeatures", Null.NullString);
-
-			int moduleDefID = AddModuleDefinition("ProfessionalPreview", "", "ProfessionalPreview", false, true);
-			AddModuleControl(moduleDefID, "", "", "DesktopModules/Admin/ProfessionalPreview/ProfessionalPreview.ascx", "~/images/icon_profeatures_16px.png", SecurityAccessLevel.Host, 0);
-
-            //Add Pages under Advanced Features Tab
-            AddProfessionalPreviewPage(advancedFeaturesTabID,
-                        "//Host//ProfessionalFeatures//AdvancedUrlManagement",
-                        "ProfessionalPreview",
-                        "Advanced URL Management",
-                        "Manage web servers in a web farm.",
-                        "~/Icons/Sigma/AdvancedUrlMngmt_16x16.png",
-                        "~/Icons/Sigma/AdvancedUrlMngmt_32x32.png");
-
             // Add File Content Type
-            var typeController = new ContentTypeController(); 
+            var typeController = new ContentTypeController();
             var contentTypeFile = (from t in typeController.GetContentTypes() where t.ContentType == "File" select t).SingleOrDefault();
 
             if (contentTypeFile == null)
@@ -2831,18 +2622,17 @@ namespace DotNetNuke.Services.Upgrade
             }
 
             var fileContentType = (from t in typeController.GetContentTypes() where t.ContentType == "File" select t).SingleOrDefault();
-           
+
 
             //only perform following for an existing installation upgrading
             if (Globals.Status == Globals.UpgradeStatus.Upgrade)
             {
                 UpdateFoldersForParentId();
                 ImportDocumentLibraryCategories();
-                ImportDocumentLibraryCategoryAssoc(fileContentType);   
+                ImportDocumentLibraryCategoryAssoc(fileContentType);
             }
-            
+
             //Add 404 Log
-            var logController = new LogController();
             var logTypeInfo = new LogTypeInfo
             {
                 LogTypeKey = EventLogController.EventLogType.PAGE_NOT_FOUND_404.ToString(),
@@ -2851,7 +2641,7 @@ namespace DotNetNuke.Services.Upgrade
                 LogTypeCSSClass = "OperationFailure",
                 LogTypeOwner = "DotNetNuke.Logging.EventLogType"
             };
-            logController.AddLogType(logTypeInfo);
+            LogController.Instance.AddLogType(logTypeInfo);
 
             //Add LogType
             var logTypeConf = new LogTypeConfigInfo
@@ -2866,7 +2656,7 @@ namespace DotNetNuke.Services.Upgrade
                 MailToAddress = Null.NullString,
                 LogTypePortalID = "*"
             };
-            logController.AddLogTypeConfigInfo(logTypeConf);
+            LogController.Instance.AddLogTypeConfigInfo(logTypeConf);
 
             UninstallPackage("DotNetNuke.SearchInput");
 
@@ -2882,7 +2672,7 @@ namespace DotNetNuke.Services.Upgrade
                 LogTypeCSSClass = "OperationFailure",
                 LogTypeOwner = "DotNetNuke.Logging.EventLogType"
             };
-            logController.AddLogType(logTypeFilterInfo);
+            LogController.Instance.AddLogType(logTypeFilterInfo);
 
             //Add LogType
             var logTypeFilterConf = new LogTypeConfigInfo
@@ -2897,28 +2687,27 @@ namespace DotNetNuke.Services.Upgrade
                 MailToAddress = Null.NullString,
                 LogTypePortalID = "*"
             };
-            logController.AddLogTypeConfigInfo(logTypeFilterConf);
-
-            var tabController = new TabController();
+            LogController.Instance.AddLogTypeConfigInfo(logTypeFilterConf);
 
             int tabID = TabController.GetTabByTabPath(Null.NullInteger, "//Host//SearchAdmin", Null.NullString);
             if (tabID > Null.NullInteger)
-                tabController.DeleteTab(tabID, Null.NullInteger);
+            {
+                TabController.Instance.DeleteTab(tabID, Null.NullInteger);
+            }
 
             var modDef = ModuleDefinitionController.GetModuleDefinitionByFriendlyName("Search Admin");
 
             if (modDef != null)
                 AddAdminPages("Search Admin", "Manage search settings associated with DotNetNuke's search capability.", "~/Icons/Sigma/Search_16x16_Standard.png", "~/Icons/Sigma/Search_32x32_Standard.png", true, modDef.ModuleDefID, "Search Admin", "");
 
-	        CopyGettingStartedStyles();
+            CopyGettingStartedStyles();
         }
 
-		private static void UpgradeToVersion711()
-		{
-			DesktopModuleController.DeleteDesktopModule("FileManager");
+        private static void UpgradeToVersion711()
+        {
+            DesktopModuleController.DeleteDesktopModule("FileManager");
 
             //Add TabUrl Logtypes
-            var logController = new LogController();
             var logTypeInfo = new LogTypeInfo
             {
                 LogTypeKey = EventLogController.EventLogType.TABURL_CREATED.ToString(),
@@ -2927,44 +2716,382 @@ namespace DotNetNuke.Services.Upgrade
                 LogTypeCSSClass = "OperationSuccess",
                 LogTypeOwner = "DotNetNuke.Logging.EventLogType"
             };
-            logController.AddLogType(logTypeInfo);
+            LogController.Instance.AddLogType(logTypeInfo);
 
-		    logTypeInfo.LogTypeKey = EventLogController.EventLogType.TABURL_UPDATED.ToString();
-		    logTypeInfo.LogTypeFriendlyName = "TabURL updated";
-            logController.AddLogType(logTypeInfo);
+            logTypeInfo.LogTypeKey = EventLogController.EventLogType.TABURL_UPDATED.ToString();
+            logTypeInfo.LogTypeFriendlyName = "TabURL updated";
+            LogController.Instance.AddLogType(logTypeInfo);
 
             logTypeInfo.LogTypeKey = EventLogController.EventLogType.TABURL_DELETED.ToString();
             logTypeInfo.LogTypeFriendlyName = "TabURL deleted";
-            logController.AddLogType(logTypeInfo);
+            LogController.Instance.AddLogType(logTypeInfo);
 
-		}
+        }
 
-		private static void UpgradeToVersion712()
-		{
-			//update console module in Admin/Host page to set OrderTabsByHierarchy setting to true.
-			var portalController = new PortalController();
-			var moduleController = new ModuleController();
-			foreach (PortalInfo portal in portalController.GetPortals())
-			{
-				var tabId = TabController.GetTabByTabPath(portal.PortalID, "//Admin", Null.NullString);
-				if (tabId != Null.NullInteger)
-				{
-					foreach (var module in new ModuleController().GetTabModules(tabId).Where(m => m.Value.ModuleDefinition.FriendlyName == "Console"))
-					{
-						moduleController.UpdateModuleSetting(module.Key, "OrderTabsByHierarchy", "True");
-					}
-				}
-			}
+        private static void UpgradeToVersion712()
+        {
+            //update console module in Admin/Host page to set OrderTabsByHierarchy setting to true.
+            foreach (PortalInfo portal in PortalController.Instance.GetPortals())
+            {
+                var tabId = TabController.GetTabByTabPath(portal.PortalID, "//Admin", Null.NullString);
+                if (tabId != Null.NullInteger)
+                {
+                    foreach (var module in ModuleController.Instance.GetTabModules(tabId).Where(m => m.Value.ModuleDefinition.FriendlyName == "Console"))
+                    {
+                        ModuleController.Instance.UpdateModuleSetting(module.Key, "OrderTabsByHierarchy", "True");
+                    }
+                }
+            }
 
-			var hostTabId = TabController.GetTabByTabPath(Null.NullInteger, "//Host", Null.NullString);
-			if (hostTabId != Null.NullInteger)
-			{
-				foreach (var module in new ModuleController().GetTabModules(hostTabId).Where(m => m.Value.ModuleDefinition.FriendlyName == "Console"))
-				{
-					moduleController.UpdateModuleSetting(module.Key, "OrderTabsByHierarchy", "True");
-				}
-			}
-		}
+            var hostTabId = TabController.GetTabByTabPath(Null.NullInteger, "//Host", Null.NullString);
+            if (hostTabId != Null.NullInteger)
+            {
+                foreach (var module in ModuleController.Instance.GetTabModules(hostTabId).Where(m => m.Value.ModuleDefinition.FriendlyName == "Console"))
+                {
+                    ModuleController.Instance.UpdateModuleSetting(module.Key, "OrderTabsByHierarchy", "True");
+                }
+            }
+        }
+
+        private static void UpgradeToVersion720()
+        {
+            var desktopModule = DesktopModuleController.GetDesktopModuleByModuleName("51Degrees.mobi", Null.NullInteger);
+            if (desktopModule != null)
+            {
+                DesktopModuleController.RemoveDesktopModuleFromPortals(desktopModule.DesktopModuleID);
+            }
+
+            desktopModule = DesktopModuleController.GetDesktopModuleByModuleName("DotNetNuke.RadEditorProvider", Null.NullInteger);
+            if (desktopModule != null)
+            {
+                DesktopModuleController.RemoveDesktopModuleFromPortals(desktopModule.DesktopModuleID);
+            }
+
+            //ensure old codeplex module is uninstalled - need to check for both variants of package name
+            UninstallPackage("DotNetNuke.Module Creator");
+            UninstallPackage("DNNCorp.ModuleCreator");
+
+            DesktopModuleController.AddModuleCategory("Developer");
+            var moduleDefId = AddModuleDefinition("Module Creator", "Development of modules.", "Module Creator");
+            AddModuleControl(moduleDefId, "", "", "DesktopModules/Admin/ModuleCreator/CreateModule.ascx", "~/DesktopModules/Admin/ModuleCreator/icon.png", SecurityAccessLevel.Host, 0);
+            if (ModuleDefinitionController.GetModuleDefinitionByID(moduleDefId) != null)
+            {
+                var desktopModuleId = ModuleDefinitionController.GetModuleDefinitionByID(moduleDefId).DesktopModuleID;
+                desktopModule = DesktopModuleController.GetDesktopModule(desktopModuleId, Null.NullInteger);
+                desktopModule.Category = "Developer";
+                DesktopModuleController.SaveDesktopModule(desktopModule, false, false);
+
+                var package = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.PackageID == desktopModule.PackageID);
+                package.IconFile = "~/Icons/Sigma/ModuleCreator_32x32.png";
+                PackageController.Instance.SaveExtensionPackage(package);
+            }
+
+            var typeController = new ContentTypeController();
+            var fileContentType = (from t in typeController.GetContentTypes() where t.ContentType == "File" select t).SingleOrDefault();
+
+            //only perform following for an existing installation upgrading
+            if (Globals.Status == Globals.UpgradeStatus.Upgrade)
+            {
+                ImportDocumentLibraryCategories();
+                ImportDocumentLibraryCategoryAssoc(fileContentType);
+
+                AddDefaultContentWorkflows();
+            }
+            
+            //fixes issue introduced by eventlog's being defined in upgrade.cs
+            PortalController.EnsureRequiredEventLogTypesExist();
+
+            //Remove Professional Features pages from CE
+            int advancedFeaturesTabId = TabController.GetTabByTabPath(Null.NullInteger, "//Host//ProfessionalFeatures", Null.NullString);
+            if (DotNetNukeContext.Current.Application.Name == "DNNCORP.CE")
+            {
+                foreach (var tab in TabController.GetTabsByParent(advancedFeaturesTabId, Null.NullInteger))
+                {
+                    TabController.Instance.DeleteTab(tab.TabID, Null.NullInteger);
+                }
+                TabController.Instance.DeleteTab(advancedFeaturesTabId, Null.NullInteger);
+            }
+
+            //Remove Whats New
+            int whatsNewTabId = TabController.GetTabByTabPath(Null.NullInteger, "//Host//WhatsNew", Null.NullString);
+            TabController.Instance.DeleteTab(whatsNewTabId, Null.NullInteger);
+
+            //Remove WhatsNew module
+            DesktopModuleController.DeleteDesktopModule("WhatsNew");
+
+            //read plaintext password via old API and encrypt
+            var current = HostController.Instance.GetString("SMTPPassword");
+            if (!string.IsNullOrEmpty(current))
+            {
+                HostController.Instance.UpdateEncryptedString("SMTPPassword", current, Config.GetDecryptionkey());
+            }
+        }
+
+        private static void UpgradeToVersion721()
+        {
+            try
+            {
+                //the username maybe html encode when register in 7.1.2, it will caught unicode charactors changed, need use InputFilter to correct the value.
+                var portalSecurity = new PortalSecurity();
+                using (var reader = DataProvider.Instance().ExecuteSQL("SELECT UserID, Username FROM {databaseOwner}[{objectQualifier}Users] WHERE Username LIKE '%&%'"))
+                {
+                    while (reader.Read())
+                    {
+                        var userId = Convert.ToInt32(reader["UserID"]);
+                        var userName = reader["Username"].ToString();
+
+                        if (userName != HttpUtility.HtmlDecode(userName))
+                        {
+                            
+                            userName = HttpUtility.HtmlDecode(userName);
+                            userName = portalSecurity.InputFilter(userName,
+                                                                 PortalSecurity.FilterFlag.NoScripting |
+                                                                 PortalSecurity.FilterFlag.NoAngleBrackets |
+                                                                 PortalSecurity.FilterFlag.NoMarkup);
+
+                            UserController.ChangeUsername(userId, userName);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+            }
+
+            AddManageUsersModulePermissions();
+        }
+
+        private static void UpgradeToVersion722()
+        {
+            UninstallPackage("DotNetNuke.Messaging");
+
+            //add event log type:POTENTIAL_PAYPAL_PAYMENT_FRAUD
+            if (!DoesLogTypeExists(EventLogController.EventLogType.POTENTIAL_PAYPAL_PAYMENT_FRAUD.ToString()))
+            {
+                var logTypeInfo = new LogTypeInfo
+                                      {
+                                          LogTypeKey =
+                                              EventLogController.EventLogType.POTENTIAL_PAYPAL_PAYMENT_FRAUD.ToString(),
+                                          LogTypeFriendlyName = "Potential Paypal Payment Fraud",
+                                          LogTypeDescription = "",
+                                          LogTypeCSSClass = "OperationFailure",
+                                          LogTypeOwner = "DotNetNuke.Logging.EventLogType"
+                                      };
+                LogController.Instance.AddLogType(logTypeInfo);
+            }
+
+            //AdvancedSettings module needs to be made a system package
+            var pkg = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.AdvancedSettings");
+            if (pkg != null)
+            {
+                pkg.IsSystemPackage = true;
+                PackageController.Instance.SaveExtensionPackage(pkg);
+            }
+
+            //Site Wizard module needs to be made a system package
+            pkg = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.SiteWizard");
+            if (pkg != null)
+            {
+                pkg.IsSystemPackage = true;
+                PackageController.Instance.SaveExtensionPackage(pkg);
+            }
+
+            //Site Log module needs to be made a system package
+            pkg = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.SiteLog");
+            if (pkg != null)
+            {
+                pkg.IsSystemPackage = true;
+                PackageController.Instance.SaveExtensionPackage(pkg);
+            }
+
+            //Module Creator module needs to be made a system package
+            pkg = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.Module Creator");
+            if (pkg != null)
+            {
+                pkg.IsSystemPackage = true;
+                PackageController.Instance.SaveExtensionPackage(pkg);
+            }
+
+            //Telerik.Web module needs to be made a system package
+            pkg = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "DotNetNuke.Telerik.Web");
+            if (pkg != null)
+            {
+                pkg.IsSystemPackage = true;
+                PackageController.Instance.SaveExtensionPackage(pkg);
+            }
+
+            //jQuery needs to be made a system package
+            pkg = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "jQuery");
+            if (pkg != null)
+            {
+                pkg.IsSystemPackage = true;
+                PackageController.Instance.SaveExtensionPackage(pkg);
+            }
+
+            //jQuery-Migrate needs to be made a system package
+            pkg = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == "jQuery-Migrate");
+            if (pkg != null)
+            {
+                pkg.IsSystemPackage = true;
+                PackageController.Instance.SaveExtensionPackage(pkg);
+            }
+
+            //Make ConfigurationManager Premium
+            MakeModulePremium(@"ConfigurationManager");
+
+            //Make ConfigurationManager Premium
+            MakeModulePremium(@"Dashboard");
+
+            //Make ProfessionalPreview Premium
+            MakeModulePremium(@"ProfessionalPreview");
+        }
+
+        private static void UpgradeToVersion730()
+        {
+#pragma warning disable 612,618
+            if (jQuery.UseHostedScript)
+            {
+                HostController.Instance.Update("CDNEnabled","True",true);
+
+                var jquery = JavaScriptLibraryController.Instance.GetLibrary(l => l.LibraryName == CommonJs.jQuery);
+                jquery.CDNPath = jQuery.HostedUrl;
+                JavaScriptLibraryController.Instance.SaveLibrary(jquery);
+
+                var jqueryui = JavaScriptLibraryController.Instance.GetLibrary(l => l.LibraryName == CommonJs.jQueryUI);
+                jqueryui.CDNPath = jQuery.HostedUIUrl;
+                JavaScriptLibraryController.Instance.SaveLibrary(jqueryui);
+
+                var jquerymigrate = JavaScriptLibraryController.Instance.GetLibrary(l => l.LibraryName == CommonJs.jQueryMigrate);
+                jquerymigrate.CDNPath = jQuery.HostedMigrateUrl;
+                JavaScriptLibraryController.Instance.SaveLibrary(jquerymigrate);
+            }
+#pragma warning restore 612,618
+        }
+
+        private static void UpgradeToVersion732()
+        {
+            //Register System referenced 3rd party assemblies.
+            DataProvider.Instance().RegisterAssembly(Null.NullInteger, "Lucene.Net.dll", "3.0.3");
+            DataProvider.Instance().RegisterAssembly(Null.NullInteger, "Lucene.Net.Contrib.FastVectorHighlighter.dll", "3.0.3");
+            DataProvider.Instance().RegisterAssembly(Null.NullInteger, "Lucene.Net.Contrib.Analyzers.dll", "3.0.3");
+            DataProvider.Instance().RegisterAssembly(Null.NullInteger, "Microsoft.ApplicationBlocks.Data.dll", "2.0.0");
+            DataProvider.Instance().RegisterAssembly(Null.NullInteger, "Microsoft.Web.Helpers.dll", "2.0.20710");
+            DataProvider.Instance().RegisterAssembly(Null.NullInteger, "Microsoft.Web.Infrastructure.dll", "1.0.20105");
+            DataProvider.Instance().RegisterAssembly(Null.NullInteger, "Newtonsoft.Json.dll", "4.5.7");
+            DataProvider.Instance().RegisterAssembly(Null.NullInteger, "PetaPoco.dll", "5.0.1");
+            DataProvider.Instance().RegisterAssembly(Null.NullInteger, "SharpZipLib.dll", "0.81.0");
+            DataProvider.Instance().RegisterAssembly(Null.NullInteger, "System.Net.Http.dll", "1.0.0");
+            DataProvider.Instance().RegisterAssembly(Null.NullInteger, "System.Net.Http.Formatting.dll", "4.0.20710");
+            DataProvider.Instance().RegisterAssembly(Null.NullInteger, "System.Net.Http.WebRequest.dll", "1.0.0");
+            DataProvider.Instance().RegisterAssembly(Null.NullInteger, "System.Web.Helpers.dll", "2.0.20216");
+            DataProvider.Instance().RegisterAssembly(Null.NullInteger, "System.Web.Http.dll", "4.0.20710");
+            DataProvider.Instance().RegisterAssembly(Null.NullInteger, "System.Web.Http.WebHost.dll", "4.0.20710");
+            DataProvider.Instance().RegisterAssembly(Null.NullInteger, "System.Web.Razor.dll", "2.0.20216");
+            DataProvider.Instance().RegisterAssembly(Null.NullInteger, "System.Web.WebPages.Deployment.dll", "2.0.20710");
+            DataProvider.Instance().RegisterAssembly(Null.NullInteger, "System.Web.WebPages.dll", "2.0.20710");
+            DataProvider.Instance().RegisterAssembly(Null.NullInteger, "System.Web.WebPages.Razor.dll", "2.0.20126");
+            DataProvider.Instance().RegisterAssembly(Null.NullInteger, "WebFormsMvp.dll", "1.4.1");
+            DataProvider.Instance().RegisterAssembly(Null.NullInteger, "WebMatrix.Data.dll", "2.0.20126");
+            DataProvider.Instance().RegisterAssembly(Null.NullInteger, "WebMatrix.WebData.dll", "2.0.20126");
+
+            //update help url
+            HostController.Instance.Update("HelpURL", "http://help.dotnetnuke.com/070300/default.htm?showToc=true", false);
+        }
+
+        private static void UpgradeToVersion733()
+        {
+            var notificationType = new NotificationType { Name = "NewUnauthorizedUserRegistration", Description = "New Unauthorized User Registration Notification" };
+            NotificationsController.Instance.CreateNotificationType(notificationType);
+
+            var actions = new List<NotificationTypeAction>
+                              {
+                                  new NotificationTypeAction
+                                      {
+                                          NameResourceKey = "AuthorizeUser",
+                                          DescriptionResourceKey = "AuthorizeUserDescription",
+                                          APICall = "DesktopModules/InternalServices/API/NewUserNotificationService/Authorize"
+                                      },
+                                  new NotificationTypeAction
+                                      {
+                                          NameResourceKey = "RejectUser",
+                                          DescriptionResourceKey = "RejectUserDescription",
+                                          APICall = "DesktopModules/InternalServices/API/NewUserNotificationService/Reject"
+                                      }
+                              };
+
+            NotificationsController.Instance.SetNotificationTypeActions(actions, notificationType.NotificationTypeId);
+        }
+
+        private static void AddManageUsersModulePermissions()
+        {
+           var permCtl = new PermissionController();
+           var desktopInfo = DesktopModuleController.GetDesktopModuleByModuleName("Security", Null.NullInteger);
+            //add new user dialog
+            var md = ModuleDefinitionController.GetModuleDefinitionByFriendlyName("User Account", desktopInfo.DesktopModuleID);
+               try
+                   {
+                   var pi = new PermissionInfo
+                   {
+                       ModuleDefID = md.ModuleDefID,
+                       PermissionCode = "SECURITY_MODULE",
+                       PermissionKey = "MANAGEUSER",
+                       PermissionName = "Manage User"
+                   };
+
+                       permCtl.AddPermission(pi);
+
+                     }
+                catch
+                {
+                    //suppress
+                }
+               md = ModuleDefinitionController.GetModuleDefinitionByFriendlyName("User Accounts", desktopInfo.DesktopModuleID);
+               try
+               {
+                   var pi = new PermissionInfo
+                   {
+                       ModuleDefID = md.ModuleDefID,
+                       PermissionCode = "SECURITY_MODULE",
+                       PermissionKey = "MANAGEUSERS",
+                       PermissionName = "Manage Users"
+                   };
+
+                   permCtl.AddPermission(pi);
+
+               }
+               catch
+               {
+                   //suppress
+               }
+               md = ModuleDefinitionController.GetModuleDefinitionByFriendlyName("Security Roles", desktopInfo.DesktopModuleID);
+               try
+               {
+                   var pi = new PermissionInfo
+                   {
+                       ModuleDefID = md.ModuleDefID,
+                       PermissionCode = "SECURITY_MODULE",
+                       PermissionKey = "MANAGEROLES",
+                       PermissionName = "Manage Roles"
+                   };
+
+                   permCtl.AddPermission(pi);
+
+               }
+               catch
+               {
+                   //suppress
+               }
+            
+        }
+
+        private static void AddDefaultContentWorkflows()
+        {
+            foreach (PortalInfo portal in PortalController.Instance.GetPortals())
+            {
+                ContentWorkflowController.Instance.CreateDefaultWorkflows(portal.PortalID);
+            }
+        }
 
         private static ContentItem CreateFileContentItem()
         {
@@ -2983,7 +3110,7 @@ namespace DotNetNuke.Services.Upgrade
                 Indexed = false,
             };
 
-            objContent.ContentItemId =  DotNetNuke.Entities.Content.Common.Util.GetContentController().AddContentItem(objContent);
+            objContent.ContentItemId = DotNetNuke.Entities.Content.Common.Util.GetContentController().AddContentItem(objContent);
 
             return objContent;
         }
@@ -3011,9 +3138,9 @@ namespace DotNetNuke.Services.Upgrade
                     }
                     else
                     {
-                        attachContentItem=Util.GetContentController().GetContentItem(file.ContentItemID);
+                        attachContentItem = Util.GetContentController().GetContentItem(file.ContentItemID);
                     }
-                    
+
                     var term = terms.SingleOrDefault(t => t.Name == dr["CategoryName"].ToString());
                     if (term == null)
                     {
@@ -3032,8 +3159,8 @@ namespace DotNetNuke.Services.Upgrade
         private static void ImportDocumentLibraryCategories()
         {
             VocabularyController vocabularyController = new VocabularyController();
-            var defaultTags= (from v in vocabularyController.GetVocabularies() where v.IsSystem && v.Name == "Tags" select v).SingleOrDefault();
-            
+            var defaultTags = (from v in vocabularyController.GetVocabularies() where v.IsSystem && v.Name == "Tags" select v).SingleOrDefault();
+
             DataProvider dataProvider = DataProvider.Instance();
             dataProvider.ExecuteNonQuery("ImportDocumentLibraryCategories", defaultTags.VocabularyId);
         }
@@ -3075,7 +3202,7 @@ namespace DotNetNuke.Services.Upgrade
 
         private static void UninstallPackage(string packageName)
         {
-            var searchInput = PackageController.GetPackageByName(packageName);
+            var searchInput = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.Name == packageName);
             if (searchInput != null)
             {
                 var searchInputInstaller = new Installer.Installer(searchInput, Globals.ApplicationMapPath);
@@ -3183,33 +3310,29 @@ namespace DotNetNuke.Services.Upgrade
         private static void ReplaceMessagingModule()
         {
             DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogStart", Localization.Localization.GlobalResourceFile) + "ReplaceMessagingModule");
-            var portalController = new PortalController();
-            var moduleController = new ModuleController();
-            var tabController = new TabController();
-
             var moduleDefinition = ModuleDefinitionController.GetModuleDefinitionByFriendlyName("Message Center");
             if (moduleDefinition == null) return;
 
-            var portals = portalController.GetPortals();
+            var portals = PortalController.Instance.GetPortals();
             foreach (PortalInfo portal in portals)
             {
                 if (portal.UserTabId > Null.NullInteger)
                 {
                     //Find TabInfo
-                    TabInfo tab = tabController.GetTab(portal.UserTabId, portal.PortalID, true);
+                    TabInfo tab = TabController.Instance.GetTab(portal.UserTabId, portal.PortalID, true);
                     if (tab != null)
                     {
                         //Add new module to the page
                         AddModuleToPage(tab, moduleDefinition.ModuleDefID, "Message Center", "", true);
                     }
 
-                    foreach (KeyValuePair<int, ModuleInfo> kvp in moduleController.GetTabModules(portal.UserTabId))
+                    foreach (KeyValuePair<int, ModuleInfo> kvp in ModuleController.Instance.GetTabModules(portal.UserTabId))
                     {
                         var module = kvp.Value;
                         if (module.DesktopModule.FriendlyName == "Messaging")
                         {
                             //Delete the Module from the Modules list
-                            moduleController.DeleteTabModule(module.TabID, module.ModuleID, false);
+                            ModuleController.Instance.DeleteTabModule(module.TabID, module.ModuleID, false);
                             break;
                         }
                     }
@@ -3217,11 +3340,25 @@ namespace DotNetNuke.Services.Upgrade
             }
         }
 
+        public static void MakeModulePremium(string moduleName)
+        {
+            var desktopModule = DesktopModuleController.GetDesktopModuleByModuleName(moduleName, -1);
+            if (desktopModule != null)
+            {
+                desktopModule.IsAdmin = true;
+                desktopModule.IsPremium = true;
+                DesktopModuleController.SaveDesktopModule(desktopModule, false, true);
+
+                //Remove Portal/Module to PortalDesktopModules
+                DesktopModuleController.RemoveDesktopModuleFromPortals(desktopModule.DesktopModuleID);
+            }
+        }
+
+
         private static void MovePhotoProperty()
         {
             DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogStart", Localization.Localization.GlobalResourceFile) + "MovePhotoProperty");
-            var portalController = new PortalController();
-            foreach (PortalInfo portal in portalController.GetPortals())
+            foreach (PortalInfo portal in PortalController.Instance.GetPortals())
             {
                 var properties = ProfileController.GetPropertyDefinitionsByPortal(portal.PortalID).Cast<ProfilePropertyDefinition>();
                 var propPhoto = properties.FirstOrDefault(p => p.PropertyName == "Photo");
@@ -3246,7 +3383,7 @@ namespace DotNetNuke.Services.Upgrade
         {
             DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogStart", Localization.Localization.GlobalResourceFile) + "UpdateChildPortalsDefaultPage");
             //Update Child Portal subHost.aspx
-            foreach (PortalAliasInfo aliasInfo in TestablePortalAliasController.Instance.GetPortalAliases().Values)
+            foreach (PortalAliasInfo aliasInfo in PortalAliasController.Instance.GetPortalAliases().Values)
             {
                 //For the alias to be for a child it must be of the form ...../child
                 int intChild = aliasInfo.HTTPAlias.IndexOf("/");
@@ -3295,35 +3432,46 @@ namespace DotNetNuke.Services.Upgrade
             }
         }
 
-		private static void CopyGettingStartedStyles()
-		{
-			//copy getting started css to portals folder.
-			var hostGettingStartedFile = string.Format("{0}GettingStarted.css", Globals.HostMapPath);
-			var tabController = new TabController();
-			foreach (PortalInfo portal in new PortalController().GetPortals())
-			{
+        private static void CopyGettingStartedStyles()
+        {
+            //copy getting started css to portals folder.
+            var hostGettingStartedFile = string.Format("{0}GettingStarted.css", Globals.HostMapPath);
+            foreach (PortalInfo portal in PortalController.Instance.GetPortals())
+            {
 
-				if (File.Exists(hostGettingStartedFile))
-				{
-					var portalFile = portal.HomeDirectoryMapPath + "GettingStarted.css";
-					if (!File.Exists(portalFile))
-					{
-						File.Copy(hostGettingStartedFile, portalFile);
-					}
-				}
+                if (File.Exists(hostGettingStartedFile))
+                {
+                    var portalFile = portal.HomeDirectoryMapPath + "GettingStarted.css";
+                    if (!File.Exists(portalFile))
+                    {
+                        File.Copy(hostGettingStartedFile, portalFile);
+                    }
+                }
 
-				//update the getting started page to have this custom style sheet.
-				var gettingStartedTabId = PortalController.GetPortalSettingAsInteger("GettingStartedTabId", portal.PortalID, Null.NullInteger);
-				if (gettingStartedTabId > Null.NullInteger)
-				{
+                //update the getting started page to have this custom style sheet.
+                var gettingStartedTabId = PortalController.GetPortalSettingAsInteger("GettingStartedTabId", portal.PortalID, Null.NullInteger);
+                if (gettingStartedTabId > Null.NullInteger)
+                {
                     // check if tab exists
-				    if (tabController.GetTab(gettingStartedTabId, portal.PortalID, true) != null)
-				    {
-				        tabController.UpdateTabSetting(gettingStartedTabId, "CustomStylesheet", "GettingStarted.css");
-				    }
-				}
-			}
-		}
+                    if (TabController.Instance.GetTab(gettingStartedTabId, portal.PortalID, true) != null)
+                    {
+                        TabController.Instance.UpdateTabSetting(gettingStartedTabId, "CustomStylesheet", "GettingStarted.css");
+                    }
+                }
+            }
+        }
+
+        private static bool DoesLogTypeExists(string logTypeKey)
+        {
+            LogTypeInfo logType;
+            Dictionary<string, LogTypeInfo> logTypeDictionary = LogController.Instance.GetLogTypeInfoDictionary();
+            logTypeDictionary.TryGetValue(logTypeKey, out logType);
+            if (logType == null)
+            {
+                return false;
+            }
+            return true;
+        }
 
         #endregion
 
@@ -3348,16 +3496,15 @@ namespace DotNetNuke.Services.Upgrade
         ///-----------------------------------------------------------------------------
         public static void AddAdminPages(string tabName, string description, string tabIconFile, string tabIconFileLarge, bool isVisible, int moduleDefId, string moduleTitle, string moduleIconFile, bool inheritPermissions)
         {
-            var portalController = new PortalController();
-            ArrayList portals = portalController.GetPortals();
+            ArrayList portals = PortalController.Instance.GetPortals();
 
             //Add Page to Admin Menu of all configured Portals
-            for (int intPortal = 0; intPortal <= portals.Count - 1; intPortal++)
+            for (var index = 0; index <= portals.Count - 1; index++)
             {
-                var portal = (PortalInfo) portals[intPortal];
+                var portal = (PortalInfo)portals[index];
 
                 //Create New Admin Page (or get existing one)
-                TabInfo newPage = AddAdminPage(portal, tabName, description, tabIconFile, tabIconFileLarge, isVisible);
+                var newPage = AddAdminPage(portal, tabName, description, tabIconFile, tabIconFileLarge, isVisible);
 
                 //Add Module To Page
                 AddModuleToPage(newPage, moduleDefId, moduleTitle, moduleIconFile, inheritPermissions);
@@ -3381,8 +3528,7 @@ namespace DotNetNuke.Services.Upgrade
         public static TabInfo AddAdminPage(PortalInfo portal, string tabName, string description, string tabIconFile, string tabIconFileLarge, bool isVisible)
         {
             DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogStart", Localization.Localization.GlobalResourceFile) + "AddAdminPage:" + tabName);
-            var tabController = new TabController();
-            TabInfo adminPage = tabController.GetTab(portal.AdminTabId, portal.PortalID, false);
+            TabInfo adminPage = TabController.Instance.GetTab(portal.AdminTabId, portal.PortalID, false);
 
             if ((adminPage != null))
             {
@@ -3410,8 +3556,7 @@ namespace DotNetNuke.Services.Upgrade
         public static TabInfo AddHostPage(string tabName, string description, string tabIconFile, string tabIconFileLarge, bool isVisible)
         {
             DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogStart", Localization.Localization.GlobalResourceFile) + "AddHostPage:" + tabName);
-            var tabController = new TabController();
-            TabInfo hostPage = tabController.GetTabByName("Host", Null.NullInteger);
+            TabInfo hostPage = TabController.Instance.GetTabByName("Host", Null.NullInteger);
 
             if ((hostPage != null))
             {
@@ -3479,74 +3624,73 @@ namespace DotNetNuke.Services.Upgrade
         ///  [cnurse]	11/16/2004	created
         ///</history>
         ///-----------------------------------------------------------------------------
-        public static int AddModuleToPage(TabInfo page, int moduleDefId, string moduleTitle, string moduleIconFile, bool inheritPermissions)
-        {
-	        return AddModuleToPage(page, moduleDefId, moduleTitle, moduleIconFile, inheritPermissions, true, Globals.glbDefaultPane);
-        }
+		public static int AddModuleToPage(TabInfo page, int moduleDefId, string moduleTitle, string moduleIconFile, bool inheritPermissions)
+		{
+			return AddModuleToPage(page, moduleDefId, moduleTitle, moduleIconFile, inheritPermissions, true, Globals.glbDefaultPane);
+		}
 
 		public static int AddModuleToPage(TabInfo page, int moduleDefId, string moduleTitle, string moduleIconFile, bool inheritPermissions, bool displayTitle, string paneName)
-        {
-            DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogStart", Localization.Localization.GlobalResourceFile) + "AddModuleToPage:" + moduleDefId);
-            var moduleController = new ModuleController();
-            ModuleInfo moduleInfo;
-            int moduleId = Null.NullInteger;
+		{
+			DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogStart", Localization.Localization.GlobalResourceFile) + "AddModuleToPage:" + moduleDefId);
+			ModuleInfo moduleInfo;
+			int moduleId = Null.NullInteger;
 
-            if ((page != null))
-            {
-                bool isDuplicate = false;
-                foreach (var kvp in moduleController.GetTabModules(page.TabID))
-                {
-                    moduleInfo = kvp.Value;
-                    if (moduleInfo.ModuleDefID == moduleDefId)
-                    {
-                        isDuplicate = true;
-                        moduleId = moduleInfo.ModuleID;
-                    }
-                }
+			if ((page != null))
+			{
+				bool isDuplicate = false;
+                foreach (var kvp in ModuleController.Instance.GetTabModules(page.TabID))
+				{
+					moduleInfo = kvp.Value;
+					if (moduleInfo.ModuleDefID == moduleDefId)
+					{
+						isDuplicate = true;
+						moduleId = moduleInfo.ModuleID;
+					}
+				}
 
-                if (!isDuplicate)
-                {
-                    moduleInfo = new ModuleInfo
-                                     {
-                                         ModuleID = Null.NullInteger,
-                                         PortalID = page.PortalID,
-                                         TabID = page.TabID,
-                                         ModuleOrder = -1,
-                                         ModuleTitle = moduleTitle,
-                                         PaneName = paneName,
-                                         ModuleDefID = moduleDefId,
-                                         CacheTime = 0,
-                                         IconFile = moduleIconFile,
-                                         AllTabs = false,
-                                         Visibility = VisibilityState.None,
-                                         InheritViewPermissions = inheritPermissions,
-										 DisplayTitle = displayTitle
-                                     };
+				if (!isDuplicate)
+				{
+					moduleInfo = new ModuleInfo
+					{
+						ModuleID = Null.NullInteger,
+						PortalID = page.PortalID,
+						TabID = page.TabID,
+						ModuleOrder = -1,
+						ModuleTitle = moduleTitle,
+						PaneName = paneName,
+						ModuleDefID = moduleDefId,
+						CacheTime = 0,
+						IconFile = moduleIconFile,
+						AllTabs = false,
+						Visibility = VisibilityState.None,
+						InheritViewPermissions = inheritPermissions,
+						DisplayTitle = displayTitle
+					};
 
-                    try
-                    {
-                        moduleId = moduleController.AddModule(moduleInfo);
-                    }
-                    catch (Exception exc)
-                    {
-                        Logger.Error(exc);
+					try
+					{
+						moduleId = ModuleController.Instance.AddModule(moduleInfo);
+					}
+					catch (Exception exc)
+					{
+						Logger.Error(exc);
 						DnnInstallLogger.InstallLogError(exc);
-                    }
-                }
-            }
-            DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogEnd", Localization.Localization.GlobalResourceFile) + "AddModuleToPage:" + moduleDefId);
-            return moduleId;
-        }
+					}
+				}
+			}
+			DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogEnd", Localization.Localization.GlobalResourceFile) + "AddModuleToPage:" + moduleDefId);
+			return moduleId;
+		}
+
 
         public static int AddModuleToPage(string tabPath, int portalId, int moduleDefId, string moduleTitle, string moduleIconFile, bool inheritPermissions)
         {
-            var tabController = new TabController();
             int moduleId = Null.NullInteger;
 
             int tabID = TabController.GetTabByTabPath(portalId, tabPath, Null.NullString);
             if ((tabID != Null.NullInteger))
             {
-                TabInfo tab = tabController.GetTab(tabID, portalId, true);
+                TabInfo tab = TabController.Instance.GetTab(tabID, portalId, true);
                 if ((tab != null))
                 {
                     moduleId = AddModuleToPage(tab, moduleDefId, moduleTitle, moduleIconFile, inheritPermissions);
@@ -3557,16 +3701,13 @@ namespace DotNetNuke.Services.Upgrade
 
         public static void AddModuleToPages(string tabPath, int moduleDefId, string moduleTitle, string moduleIconFile, bool inheritPermissions)
         {
-            var objPortalController = new PortalController();
-            var objTabController = new TabController();
-
-            ArrayList portals = objPortalController.GetPortals();
+            var portals = PortalController.Instance.GetPortals();
             foreach (PortalInfo portal in portals)
             {
                 int tabID = TabController.GetTabByTabPath(portal.PortalID, tabPath, Null.NullString);
                 if ((tabID != Null.NullInteger))
                 {
-                    TabInfo tab = objTabController.GetTab(tabID, portal.PortalID, true);
+                    var tab = TabController.Instance.GetTab(tabID, portal.PortalID, true);
                     if ((tab != null))
                     {
                         AddModuleToPage(tab, moduleDefId, moduleTitle, moduleIconFile, inheritPermissions);
@@ -3608,7 +3749,6 @@ namespace DotNetNuke.Services.Upgrade
                     }
                 }
 
-                var portalController = new PortalController();
                 XmlNode adminNode = node.SelectSingleNode("administrator");
                 if (adminNode != null)
                 {
@@ -3658,7 +3798,7 @@ namespace DotNetNuke.Services.Upgrade
                     var userInfo = CreateUserInfo(firstName, lastName, username, password, email);
 
                     //Create Portal
-                    portalId = portalController.CreatePortal(portalName, 
+                    portalId = PortalController.Instance.CreatePortal(portalName,
                                                              userInfo,
                                                              description,
                                                              keyWords,
@@ -3685,13 +3825,13 @@ namespace DotNetNuke.Services.Upgrade
                                             HtmlUtils.WriteFeedback(HttpContext.Current.Response, indent, "Creating Site Alias: " + portalAlias.InnerText + "<br>");
                                         }
                                     }
-                                    portalController.AddPortalAlias(portalId, portalAlias.InnerText);
+                                    PortalController.Instance.AddPortalAlias(portalId, portalAlias.InnerText);
                                 }
                             }
                         }
 
                         //Force Administrator to Update Password on first log in
-                        PortalInfo portal = portalController.GetPortal(portalId);
+                        PortalInfo portal = PortalController.Instance.GetPortal(portalId);
                         UserInfo adminUser = UserController.GetUserById(portalId, portal.AdministratorId);
                         adminUser.Membership.UpdatePassword = true;
                         UserController.UpdateUser(portalId, adminUser);
@@ -3708,10 +3848,10 @@ namespace DotNetNuke.Services.Upgrade
                 if (HttpContext.Current != null)
                 {
                     HtmlUtils.WriteFeedback(HttpContext.Current.Response, indent, "<font color='red'>Error: " + ex.Message + ex.StackTrace + "</font><br>");
-					DnnInstallLogger.InstallLogError(ex);
+                    DnnInstallLogger.InstallLogError(ex);
                 }
                 // failure
-                portalId = - 1;
+                portalId = -1;
             }
             return portalId;
         }
@@ -3725,7 +3865,7 @@ namespace DotNetNuke.Services.Upgrade
                                     LastName = lastName,
                                     Username = userName,
                                     DisplayName = firstName + " " + lastName,
-                                    Membership = {Password = password},
+                                    Membership = { Password = password },
                                     Email = email,
                                     IsSuperUser = false
                                 };
@@ -3738,8 +3878,8 @@ namespace DotNetNuke.Services.Upgrade
 
         internal static PortalController.PortalTemplateInfo FindBestTemplate(string templateFileName)
         {
-            var templates = TestablePortalController.Instance.GetAvailablePortalTemplates();
-           
+            var templates = PortalController.Instance.GetAvailablePortalTemplates();
+
             //Load Template
             var installTemplate = new XmlDocument();
             Upgrade.GetInstallTemplate(installTemplate);
@@ -3751,7 +3891,7 @@ namespace DotNetNuke.Services.Upgrade
                 currentCulture = XmlUtils.GetNodeValue(rootNode.CreateNavigator(), "installCulture");
             }
 
-            if(String.IsNullOrEmpty(currentCulture))
+            if (String.IsNullOrEmpty(currentCulture))
             {
                 currentCulture = Localization.Localization.SystemLocale;
             }
@@ -3857,9 +3997,9 @@ namespace DotNetNuke.Services.Upgrade
                 dr = dataProvider.ExecuteReader("GetUserCount");
                 dr.Read();
                 int userCount = dr.GetInt32(0);
-// ReSharper disable PossibleLossOfFraction
-                double time = userCount/10834;
-// ReSharper restore PossibleLossOfFraction
+                // ReSharper disable PossibleLossOfFraction
+                double time = userCount / 10834;
+                // ReSharper restore PossibleLossOfFraction
                 if (userCount > 1000)
                 {
                     warnings += "<br/><h3>More than 1000 Users</h3><p>This DotNetNuke Database has " + userCount +
@@ -3929,7 +4069,7 @@ namespace DotNetNuke.Services.Upgrade
 
                 exceptions += string.Format("Error: {0}{1}", ex.Message + ex.StackTrace, Environment.NewLine);
                 // log the results
-				DnnInstallLogger.InstallLogError(exceptions);
+                DnnInstallLogger.InstallLogError(exceptions);
                 try
                 {
                     using (StreamWriter streamWriter = File.CreateText(providerPath + Globals.FormatVersion(version) + "_Config.log"))
@@ -4213,7 +4353,7 @@ namespace DotNetNuke.Services.Upgrade
                                     LastName = lastName,
                                     Username = username,
                                     DisplayName = firstName + " " + lastName,
-                                    Membership = {Password = password},
+                                    Membership = { Password = password },
                                     Email = email,
                                     IsSuperUser = true
                                 };
@@ -4224,7 +4364,7 @@ namespace DotNetNuke.Services.Upgrade
                 superUser.Profile.PreferredLocale = locale;
                 superUser.Profile.PreferredTimeZone = TimeZoneInfo.Local;
 
-                if(updatePassword.ToLowerInvariant() == "true")
+                if (updatePassword.ToLowerInvariant() == "true")
                 {
                     superUser.Membership.UpdatePassword = true;
                 }
@@ -4249,8 +4389,8 @@ namespace DotNetNuke.Services.Upgrade
         {
             var scriptFiles = new ArrayList();
             string[] files = Directory.GetFiles(providerPath, "*." + DefaultProvider);
-
-            Logger.TraceFormat("GetUpgradedScripts databaseVersion:{0} applicationVersion:{1}", databaseVersion, DotNetNukeContext.Current.Application.Version);
+            
+            Logger.TraceFormat("GetUpgradedScripts databaseVersion:{0} applicationVersion:{1}", databaseVersion, ApplicationVersion);
 
             foreach (string file in files)
             {
@@ -4261,7 +4401,7 @@ namespace DotNetNuke.Services.Upgrade
                     {
                         var version = new Version(GetFileNameWithoutExtension(file));
                         // check if script file is relevant for upgrade
-                        if (version > databaseVersion && version <= DotNetNukeContext.Current.Application.Version)
+                        if (version > databaseVersion && version <= ApplicationVersion)
                         {
                             scriptFiles.Add(file);
                             Logger.TraceFormat("GetUpgradedScripts including {0}", file);
@@ -4306,8 +4446,8 @@ namespace DotNetNuke.Services.Upgrade
                     HtmlUtils.WriteFeedback(HttpContext.Current.Response, 0, "Loading Host Settings:<br>");
                 }
 
-				//Need to clear the cache to pick up new HostSettings from the SQLDataProvider script
-				DataCache.RemoveCache(DataCache.HostSettingsCacheKey);
+                //Need to clear the cache to pick up new HostSettings from the SQLDataProvider script
+                DataCache.RemoveCache(DataCache.HostSettingsCacheKey);
 
                 //Parse the Settings nodes
                 foreach (XmlNode settingNode in node.ChildNodes)
@@ -4451,13 +4591,11 @@ namespace DotNetNuke.Services.Upgrade
                 ExecuteScripts(strProviderPath);
 
                 //Install optional resources if present
-                InstallPackages("Module", true);
-                InstallPackages("Skin", true);
-                InstallPackages("Container", true);
-                InstallPackages("Language", true);
-                InstallPackages("Provider", true);
-                InstallPackages("AuthSystem", true);
-                InstallPackages("Package", true);
+                var packages = GetInstallPackages();
+                foreach (var package in packages)
+                {
+                    InstallPackage(package.Key, package.Value.PackageType, true);
+                }
 
                 //Set Status to None
                 Globals.SetStatus(Globals.UpgradeStatus.None);
@@ -4480,7 +4618,7 @@ namespace DotNetNuke.Services.Upgrade
                     }
                 }
 
-                
+
 
                 // parse portal(s) if available
                 XmlNodeList nodes = xmlDoc.SelectNodes("//dotnetnuke/portals/portal");
@@ -4567,71 +4705,149 @@ namespace DotNetNuke.Services.Upgrade
 
             var installer = new Installer.Installer(new FileStream(file, FileMode.Open, FileAccess.Read), Globals.ApplicationMapPath, true, deleteTempFolder);
 
-                //Check if manifest is valid
-                if (installer.IsValid)
+            //Check if manifest is valid
+            if (installer.IsValid)
+            {
+                installer.InstallerInfo.RepairInstall = true;
+                success = installer.Install();
+            }
+            else
+            {
+                if (installer.InstallerInfo.ManifestFile == null)
                 {
-                    installer.InstallerInfo.RepairInstall = true;
-                    success = installer.Install();
+                    //Missing manifest
+                    if (packageType == "Skin" || packageType == "Container")
+                    {
+                        //Legacy Skin/Container
+                        string tempInstallFolder = installer.TempInstallFolder;
+                        string manifestFile = Path.Combine(tempInstallFolder, Path.GetFileNameWithoutExtension(file) + ".dnn");
+                        var manifestWriter = new StreamWriter(manifestFile);
+                        manifestWriter.Write(LegacyUtil.CreateSkinManifest(file, packageType, tempInstallFolder));
+                        manifestWriter.Close();
+
+                        installer = new Installer.Installer(tempInstallFolder, manifestFile, HttpContext.Current.Request.MapPath("."), true);
+
+                        //Set the Repair flag to true for Batch Install
+                        installer.InstallerInfo.RepairInstall = true;
+
+                        success = installer.Install();
+                    }
+                    else if (Globals.Status != Globals.UpgradeStatus.None)
+                    {
+                        var message = string.Format(Localization.Localization.GetString("InstallPackageError", Localization.Localization.ExceptionsResourceFile), file, "Manifest file missing");
+                        DnnInstallLogger.InstallLogError(message);
+                    }
                 }
                 else
                 {
-                    if (installer.InstallerInfo.ManifestFile == null)
+                    //log the failure log when installer is invalid and not caught by mainfest file missing.
+                    foreach (var log in installer.InstallerInfo.Log.Logs
+                                                .Where(l => l.Type == LogType.Failure))
                     {
-                        //Missing manifest
-                        if (packageType == "Skin" || packageType == "Container")
-                        {
-	                        //Legacy Skin/Container
-	                        string tempInstallFolder = installer.TempInstallFolder;
-	                        string manifestFile = Path.Combine(tempInstallFolder, Path.GetFileNameWithoutExtension(file) + ".dnn");
-	                        var manifestWriter = new StreamWriter(manifestFile);
-	                        manifestWriter.Write(LegacyUtil.CreateSkinManifest(file, packageType, tempInstallFolder));
-	                        manifestWriter.Close();
-
-	                        installer = new Installer.Installer(tempInstallFolder, manifestFile, HttpContext.Current.Request.MapPath("."), true);
-
-	                        //Set the Repair flag to true for Batch Install
-	                        installer.InstallerInfo.RepairInstall = true;
-
-	                        success = installer.Install();
-                        }
-                        else if(Globals.Status != Globals.UpgradeStatus.None)
-                        {
-	                        var message = string.Format(Localization.Localization.GetString("InstallPackageError", Localization.Localization.ExceptionsResourceFile), file, "Manifest file missing");
-	                        DnnInstallLogger.InstallLogError(message);
-                        }
+                        Logger.Error(log.Description);
+                        DnnInstallLogger.InstallLogError(log.Description);
                     }
-                    else
-                    {
-                        //log the failure log when installer is invalid and not caught by mainfest file missing.
-						foreach (var log in installer.InstallerInfo.Log.Logs
-													.Where(l => l.Type == LogType.Failure))
-	                    {
-							Logger.Error(log.Description);
-							DnnInstallLogger.InstallLogError(log.Description);
-	                    }
 
-                        success = false;
-                    }
+                    success = false;
                 }
+            }
 
-                if (writeFeedback)
+            if (writeFeedback)
+            {
+                HtmlUtils.WriteSuccessError(HttpContext.Current.Response, success);
+            }
+            if (success)
+            {
+                // delete file
+                try
                 {
-                    HtmlUtils.WriteSuccessError(HttpContext.Current.Response, success);
+                    File.SetAttributes(file, FileAttributes.Normal);
+                    File.Delete(file);
                 }
-                if (success)
+                catch (Exception exc)
                 {
-                    // delete file
-                    try
-                    {
-                        File.SetAttributes(file, FileAttributes.Normal);
-                        File.Delete(file);
-                    }
-                    catch (Exception exc)
-                    {
-                        Logger.Error(exc);
-                    }
+                    Logger.Error(exc);
                 }
+            }
             return success;
+        }
+
+        /// <summary>
+        /// Gets a ist of installable extensions sorted to ensure dependencies are installed first
+        /// </summary>
+        /// <returns></returns>
+        public static IDictionary<string, PackageInfo> GetInstallPackages()
+        {
+            var packageTypes = new string[] { "Module", "Skin", "Container", "JavaScriptLibrary", "Language", "Provider", "AuthSystem", "Package" };
+            var invalidPackages = new List<string>();
+
+            var packages = new Dictionary<string, PackageInfo>();
+
+            foreach (string packageType in packageTypes)
+            {
+                var installPackagePath = Globals.ApplicationMapPath + "\\Install\\" + packageType;
+                if (Directory.Exists(installPackagePath))
+                {
+                    var files = Directory.GetFiles(installPackagePath);
+                    if (files.Length > 0)
+                    {
+                        foreach (string file in files)
+                        {
+                            if (Path.GetExtension(file.ToLower()) == ".zip")
+                            {
+                                PackageController.ParsePackage(file, installPackagePath, packages, invalidPackages);
+                                //HtmlUtils.WriteFeedback(HttpContext.Current.Response, 2, "Parsing - " + file.Replace(installPackagePath + @"\", "") + "<br/>");
+                            }
+                        }
+                    }
+                }
+            }
+
+            //Add packages with no dependency requirements
+            var sortedPackages = packages.Where(p => p.Value.Dependencies.Count == 0).ToDictionary(p => p.Key, p => p.Value);
+
+            int prevDependentCount = -1;
+
+            var dependentPackages = packages.Where(p => p.Value.Dependencies.Count > 0).ToDictionary(p=> p.Key, p => p.Value);
+            int dependentCount = dependentPackages.Count;
+            //HtmlUtils.WriteFeedback(HttpContext.Current.Response, 2, "Start - Parsing Dependencies<br/>");
+            while (dependentCount != prevDependentCount)
+            {
+                prevDependentCount = dependentCount;
+                var addedPackages = new List<string>();
+                foreach (var package in dependentPackages)
+                {
+                    //HtmlUtils.WriteFeedback(HttpContext.Current.Response, 4, "Parsing - " + package.Value.Name + "<br/>");
+                    foreach (var dependency in package.Value.Dependencies)
+                    {
+                        if (sortedPackages.Count(p => p.Value.Name == dependency.PackageName && p.Value.Version >= dependency.Version) > 0)
+                        {
+                            //HtmlUtils.WriteFeedback(HttpContext.Current.Response, 4, "Dependency Resolved - " + package.Value.Name + "<br/>");
+                            sortedPackages.Add(package.Key, package.Value);
+                            addedPackages.Add(package.Key);
+                        }
+                    }
+                }
+                foreach (var packageKey in addedPackages)
+                {
+                    dependentPackages.Remove(packageKey);
+                }
+                dependentCount = dependentPackages.Count;
+            }
+
+            //Add any packages whose dependency cannot be resolved
+            foreach (var package in dependentPackages)
+            {
+                sortedPackages.Add(package.Key, package.Value);
+            }
+
+            //HtmlUtils.WriteFeedback(HttpContext.Current.Response, 2, "End - Parsing Dependencies<br/>");
+
+            //foreach (var package in sortedPackages)
+            //{
+            //    HtmlUtils.WriteFeedback(HttpContext.Current.Response, 2, "Installing - " + package.Key + "<br/>");
+            //}
+            return sortedPackages;
         }
 
         public static void InstallPackages(string packageType, bool writeFeedback)
@@ -4684,16 +4900,14 @@ namespace DotNetNuke.Services.Upgrade
         public static void RemoveAdminPages(string tabPath)
         {
             DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogStart", Localization.Localization.GlobalResourceFile) + "RemoveAdminPages:" + tabPath);
-            var portalController = new PortalController();
-            var tabController = new TabController();
 
-            ArrayList portals = portalController.GetPortals();
+            var portals = PortalController.Instance.GetPortals();
             foreach (PortalInfo portal in portals)
             {
-                int tabID = TabController.GetTabByTabPath(portal.PortalID, tabPath, Null.NullString);
+                var tabID = TabController.GetTabByTabPath(portal.PortalID, tabPath, Null.NullString);
                 if ((tabID != Null.NullInteger))
                 {
-                    tabController.DeleteTab(tabID, portal.PortalID);
+                    TabController.Instance.DeleteTab(tabID, portal.PortalID);
                 }
             }
         }
@@ -4701,11 +4915,10 @@ namespace DotNetNuke.Services.Upgrade
         public static void RemoveHostPage(string pageName)
         {
             DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogStart", Localization.Localization.GlobalResourceFile) + "RemoveHostPage:" + pageName);
-            var controller = new TabController();
-            TabInfo skinsTab = controller.GetTabByName(pageName, Null.NullInteger);
+            TabInfo skinsTab = TabController.Instance.GetTabByName(pageName, Null.NullInteger);
             if (skinsTab != null)
             {
-                controller.DeleteTab(skinsTab.TabID, Null.NullInteger);
+                TabController.Instance.DeleteTab(skinsTab.TabID, Null.NullInteger);
             }
         }
 
@@ -4718,7 +4931,6 @@ namespace DotNetNuke.Services.Upgrade
 
         public static void TryUpgradeNETFramework()
         {
-            var eventLogController = new EventLogController();
             switch (Globals.NETFrameworkVersion.ToString(2))
             {
                 case "3.5":
@@ -4726,7 +4938,7 @@ namespace DotNetNuke.Services.Upgrade
                     {
                         //Upgrade to .NET 3.5
                         string upgradeFile = string.Format("{0}\\Config\\Net35.config", Globals.InstallMapPath);
-                        string message = UpdateConfig(upgradeFile, DotNetNukeContext.Current.Application.Version, ".NET 3.5 Upgrade");
+                        string message = UpdateConfig(upgradeFile, ApplicationVersion, ".NET 3.5 Upgrade");
                         if (string.IsNullOrEmpty(message))
                         {
                             //Remove old AJAX file
@@ -4734,12 +4946,12 @@ namespace DotNetNuke.Services.Upgrade
 
                             //Log Upgrade
 
-                            eventLogController.AddLog("UpgradeNet", "Upgraded Site to .NET 3.5", PortalController.GetCurrentPortalSettings(), UserController.GetCurrentUserInfo().UserID, EventLogController.EventLogType.HOST_ALERT);
+                            EventLogController.Instance.AddLog("UpgradeNet", "Upgraded Site to .NET 3.5", PortalController.Instance.GetCurrentPortalSettings(), UserController.Instance.GetCurrentUserInfo().UserID, EventLogController.EventLogType.HOST_ALERT);
                         }
                         else
                         {
                             //Log Failed Upgrade
-                            eventLogController.AddLog("UpgradeNet", string.Format("Upgrade to .NET 3.5 failed. Error reported during attempt to update:{0}", message), PortalController.GetCurrentPortalSettings(), UserController.GetCurrentUserInfo().UserID, EventLogController.EventLogType.HOST_ALERT);
+                            EventLogController.Instance.AddLog("UpgradeNet", string.Format("Upgrade to .NET 3.5 failed. Error reported during attempt to update:{0}", message), PortalController.Instance.GetCurrentPortalSettings(), UserController.Instance.GetCurrentUserInfo().UserID, EventLogController.EventLogType.HOST_ALERT);
                         }
                     }
                     break;
@@ -4748,13 +4960,13 @@ namespace DotNetNuke.Services.Upgrade
                     {
                         //Upgrade to .NET 4.0
                         string upgradeFile = string.Format("{0}\\Config\\Net40.config", Globals.InstallMapPath);
-                        string strMessage = UpdateConfig(upgradeFile, DotNetNukeContext.Current.Application.Version, ".NET 4.0 Upgrade");
-                        eventLogController.AddLog("UpgradeNet",
+                        string strMessage = UpdateConfig(upgradeFile, ApplicationVersion, ".NET 4.0 Upgrade");
+                        EventLogController.Instance.AddLog("UpgradeNet",
                                                   string.IsNullOrEmpty(strMessage)
                                                       ? "Upgraded Site to .NET 4.0"
                                                       : string.Format("Upgrade to .NET 4.0 failed. Error reported during attempt to update:{0}", strMessage),
-                                                  PortalController.GetCurrentPortalSettings(),
-                                                  UserController.GetCurrentUserInfo().UserID,
+                                                  PortalController.Instance.GetCurrentPortalSettings(),
+                                                  UserController.Instance.GetCurrentUserInfo().UserID,
                                                   EventLogController.EventLogType.HOST_ALERT);
                     }
                     break;
@@ -4794,13 +5006,14 @@ namespace DotNetNuke.Services.Upgrade
             catch (Exception ex)
             {
                 Logger.Error(ex);
-                var objEventLog = new EventLogController();
-                var objEventLogInfo = new LogInfo();
-                objEventLogInfo.AddProperty("Upgraded DotNetNuke", "General");
-                objEventLogInfo.AddProperty("Warnings", "Error: " + ex.Message + Environment.NewLine);
-                objEventLogInfo.LogTypeKey = EventLogController.EventLogType.HOST_ALERT.ToString();
-                objEventLogInfo.BypassBuffering = true;
-                objEventLog.AddLog(objEventLogInfo);
+                var log = new LogInfo
+                {
+                    LogTypeKey = EventLogController.EventLogType.HOST_ALERT.ToString(),
+                    BypassBuffering = true
+                };
+                log.AddProperty("Upgraded DotNetNuke", "General");
+                log.AddProperty("Warnings", "Error: " + ex.Message + Environment.NewLine);
+                LogController.Instance.AddLog(log);
                 try
                 {
                     Exceptions.Exceptions.LogException(ex);
@@ -4911,8 +5124,8 @@ namespace DotNetNuke.Services.Upgrade
                     case "6.1.0":
                         UpgradeToVersion610();
                         break;
-					case "6.1.2":
-						UpgradeToVersion612();
+                    case "6.1.2":
+                        UpgradeToVersion612();
                         break;
                     case "6.1.3":
                         UpgradeToVersion613();
@@ -4934,13 +5147,31 @@ namespace DotNetNuke.Services.Upgrade
                         break;
                     case "7.1.0":
                         UpgradeToVersion710();
-						break;
-					case "7.1.1":
-						UpgradeToVersion711();
-						break;
-					case "7.1.2":
-						UpgradeToVersion712();
-						break;
+                        break;
+                    case "7.1.1":
+                        UpgradeToVersion711();
+                        break;
+                    case "7.1.2":
+                        UpgradeToVersion712();
+                        break;
+                    case "7.2.0":
+                        UpgradeToVersion720();
+                        break;
+                    case "7.2.1":
+                        UpgradeToVersion721();
+                        break;
+                    case "7.2.2":
+                        UpgradeToVersion722();
+                        break;
+                    case "7.3.0":
+                        UpgradeToVersion730();
+                        break;
+                    case "7.3.2":
+                        UpgradeToVersion732();
+                        break;
+                    case "7.3.3":
+                        UpgradeToVersion733();
+                        break;
                 }
             }
             catch (Exception ex)
@@ -4950,13 +5181,13 @@ namespace DotNetNuke.Services.Upgrade
                 // log the results
                 if (string.IsNullOrEmpty(exceptions))
                 {
-                    DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogEnd", Localization.Localization.GlobalResourceFile) + Localization.Localization.GetString("ApplicationUpgrades", Localization.Localization.GlobalResourceFile) + ": " + version.ToString(3)); 
+                    DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogEnd", Localization.Localization.GlobalResourceFile) + Localization.Localization.GetString("ApplicationUpgrades", Localization.Localization.GlobalResourceFile) + ": " + version.ToString(3));
                 }
                 else
                 {
-					DnnInstallLogger.InstallLogError(exceptions);    
+                    DnnInstallLogger.InstallLogError(exceptions);
                 }
-                
+
                 try
                 {
                     using (StreamWriter streamWriter = File.CreateText(providerPath + Globals.FormatVersion(version) + "_Application.log.resources"))
@@ -4975,7 +5206,7 @@ namespace DotNetNuke.Services.Upgrade
             {
                 HtmlUtils.WriteSuccessError(HttpContext.Current.Response, (string.IsNullOrEmpty(exceptions)));
             }
-            
+
             return exceptions;
         }
 
@@ -4993,7 +5224,7 @@ namespace DotNetNuke.Services.Upgrade
             }
             else
             {
-				DnnInstallLogger.InstallLogError(strExceptions);
+                DnnInstallLogger.InstallLogError(strExceptions);
             }
 
             if (writeFeedback)
@@ -5032,11 +5263,11 @@ namespace DotNetNuke.Services.Upgrade
             }
             if (string.IsNullOrEmpty(exceptions))
             {
-                DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogEnd", Localization.Localization.GlobalResourceFile) + "UpdateConfig:" + version.ToString(3));    
+                DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogEnd", Localization.Localization.GlobalResourceFile) + "UpdateConfig:" + version.ToString(3));
             }
             else
             {
-				DnnInstallLogger.InstallLogError(exceptions);
+                DnnInstallLogger.InstallLogError(exceptions);
             }
             return exceptions;
         }
@@ -5086,7 +5317,7 @@ namespace DotNetNuke.Services.Upgrade
             }
             else
             {
-				DnnInstallLogger.InstallLogError(exceptions);
+                DnnInstallLogger.InstallLogError(exceptions);
             }
             return exceptions;
         }
@@ -5108,8 +5339,8 @@ namespace DotNetNuke.Services.Upgrade
         ///-----------------------------------------------------------------------------
         public static void UpgradeDNN(string providerPath, Version dataBaseVersion)
         {
-            DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogStart", Localization.Localization.GlobalResourceFile) + "UpgradeDNN:" + Globals.FormatVersion(DotNetNukeContext.Current.Application.Version));
-            HtmlUtils.WriteFeedback(HttpContext.Current.Response, 0, "Upgrading to Version: " + Globals.FormatVersion(DotNetNukeContext.Current.Application.Version) + "<br/>");
+            DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogStart", Localization.Localization.GlobalResourceFile) + "UpgradeDNN:" + Globals.FormatVersion(ApplicationVersion));
+            HtmlUtils.WriteFeedback(HttpContext.Current.Response, 0, "Upgrading to Version: " + Globals.FormatVersion(ApplicationVersion) + "<br/>");
 
             //Process the Upgrade Script files
             var versions = new List<Version>();
@@ -5164,7 +5395,7 @@ namespace DotNetNuke.Services.Upgrade
                 {
                     url = url.Replace("http://", "https://");
                 }
-                url += "?core=" + Globals.FormatVersion(DotNetNukeContext.Current.Application.Version, "00", 3, "");
+                url += "?core=" + Globals.FormatVersion(Assembly.GetExecutingAssembly().GetName().Version, "00", 3, "");
                 url += "&version=" + Globals.FormatVersion(version, "00", 3, "");
                 url += "&type=" + packageType;
                 url += "&name=" + packageName;
@@ -5179,7 +5410,12 @@ namespace DotNetNuke.Services.Upgrade
                 url += "&id=" + Host.GUID;
                 if (packageType.ToUpper() == DotNetNukeContext.Current.Application.Type.ToUpper())
                 {
-                    var portals = new PortalController().GetPortals();
+                    if (!String.IsNullOrEmpty(HostController.Instance.GetString("NewsletterSubscribeEmail")))
+                    {
+                        url += "&email=" + HttpUtility.UrlEncode(HostController.Instance.GetString("NewsletterSubscribeEmail"));
+                    }
+
+                    var portals = PortalController.Instance.GetPortals();
                     url += "&no=" + portals.Count;
                     url += "&os=" + Globals.FormatVersion(Globals.OperatingSystemVersion, "00", 2, "");
                     url += "&net=" + Globals.FormatVersion(Globals.NETFrameworkVersion, "00", 2, "");
@@ -5200,7 +5436,7 @@ namespace DotNetNuke.Services.Upgrade
 
         public static string UpgradeRedirect()
         {
-            return UpgradeRedirect(DotNetNukeContext.Current.Application.Version, DotNetNukeContext.Current.Application.Type, DotNetNukeContext.Current.Application.Name, "");
+            return UpgradeRedirect(ApplicationVersion, DotNetNukeContext.Current.Application.Type, DotNetNukeContext.Current.Application.Name, "");
         }
 
         public static string UpgradeRedirect(Version version, string packageType, string packageName, string culture)
@@ -5213,7 +5449,7 @@ namespace DotNetNuke.Services.Upgrade
             else
             {
                 url = DotNetNukeContext.Current.Application.UpgradeUrl + "/redirect.aspx";
-                url += "?core=" + Globals.FormatVersion(DotNetNukeContext.Current.Application.Version, "00", 3, "");
+                url += "?core=" + Globals.FormatVersion(Assembly.GetExecutingAssembly().GetName().Version, "00", 3, "");
                 url += "&version=" + Globals.FormatVersion(version, "00", 3, "");
                 url += "&type=" + packageType;
                 url += "&name=" + packageName;
@@ -5252,28 +5488,29 @@ namespace DotNetNuke.Services.Upgrade
                 // update the version
                 Globals.UpdateDataBaseVersion(version);
 
-                var eventLogController = new EventLogController();
-                var eventLogInfo = new LogInfo();
-                eventLogInfo.AddProperty("Upgraded DotNetNuke", "Version: " + Globals.FormatVersion(version));
+                var log = new LogInfo
+                {
+                    LogTypeKey = EventLogController.EventLogType.HOST_ALERT.ToString(),
+                    BypassBuffering = true
+                };
+                log.AddProperty("Upgraded DotNetNuke", "Version: " + Globals.FormatVersion(version));
                 if (exceptions.Length > 0)
                 {
-                    eventLogInfo.AddProperty("Warnings", exceptions);
+                    log.AddProperty("Warnings", exceptions);
                 }
                 else
                 {
-                    eventLogInfo.AddProperty("No Warnings", "");
+                    log.AddProperty("No Warnings", "");
                 }
-                eventLogInfo.LogTypeKey = EventLogController.EventLogType.HOST_ALERT.ToString();
-                eventLogInfo.BypassBuffering = true;
-                eventLogController.AddLog(eventLogInfo);
+                LogController.Instance.AddLog(log);
             }
             if (string.IsNullOrEmpty(exceptions))
             {
-                DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogStart", Localization.Localization.GlobalResourceFile) + "UpgradeVersion:" + scriptFile);    
+                DnnInstallLogger.InstallLogInfo(Localization.Localization.GetString("LogStart", Localization.Localization.GlobalResourceFile) + "UpgradeVersion:" + scriptFile);
             }
             else
             {
-				DnnInstallLogger.InstallLogError(exceptions);
+                DnnInstallLogger.InstallLogError(exceptions);
             }
             return exceptions;
         }
@@ -5304,8 +5541,7 @@ namespace DotNetNuke.Services.Upgrade
                     activationResult = licenseActivation.LicenseResult;
 
                     //Log Event to Event Log
-                    var objEventLog = new EventLogController();
-                    objEventLog.AddLog("License Activation",
+                    EventLogController.Instance.AddLog("License Activation",
                                        "License Activated during install for: " + licenseConfig.AccountEmail + " | invoice: " + licenseConfig.InvoiceNumber,
                                        EventLogController.EventLogType.HOST_ALERT);
                 }

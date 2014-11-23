@@ -1,7 +1,7 @@
 #region Copyright
 // 
 // DotNetNuke® - http://www.dotnetnuke.com
-// Copyright (c) 2002-2013
+// Copyright (c) 2002-2014
 // by DotNetNuke Corporation
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
@@ -23,6 +23,7 @@
 using System.Collections.Generic;
 using System.Xml;
 
+using DotNetNuke.Common.Utilities;
 using DotNetNuke.Services.Installer.Packages;
 using DotNetNuke.Services.Localization;
 
@@ -173,7 +174,7 @@ namespace DotNetNuke.Services.Installer.Writers
             }
             else
             {
-                PackageInfo package = PackageController.GetPackage(_DependentPackageID);
+                PackageInfo package = PackageController.Instance.GetExtensionPackage(Null.NullInteger, p => p.PackageID == _DependentPackageID);
                 writer.WriteElementString("package", package.Name);
             }
         }
