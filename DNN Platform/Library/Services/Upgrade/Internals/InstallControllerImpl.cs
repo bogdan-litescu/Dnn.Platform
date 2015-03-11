@@ -29,7 +29,6 @@ using System.Data.Common;
 using System.Data.SqlClient;
 using System.Globalization;
 using System.Net;
-using System.Threading;
 using System.Web;
 using System.Xml;
 
@@ -512,10 +511,10 @@ namespace DotNetNuke.Services.Upgrade.Internals
 
         public bool IsAbleToPerformDatabaseActions(string connectionString)
         {
-            var fakeName = "{databaseOwner}[{objectQualifier}FakeTable_" + DateTime.Now.Ticks.ToString("x16") + "]";
-            var databaseActions = string.Format(@"CREATE TABLE {0}([fakeColumn] [int] NULL); SELECT * FROM {0}; DROP TABLE {0};", fakeName);
+            //todo: will need to generate a unique faketable name and introduce the dbo user
+            string databaseActions = "CREATE TABLE [dbo].[faketable]([fakeColumn] [int] NULL);select * from faketable;drop table faketable;";
             //TODO: this is an obsolete member, need a better solution to support querystring from install.config (i think)
-            var strExceptions = DataProvider.Instance().ExecuteScript(connectionString, databaseActions);
+            string strExceptions = DataProvider.Instance().ExecuteScript(connectionString, databaseActions);
             //if no exceptions we have necessary drop etc permissions
             return string.IsNullOrEmpty(strExceptions);
         }
@@ -549,8 +548,6 @@ namespace DotNetNuke.Services.Upgrade.Internals
                 //no need to download english, always there
                 if (cultureCode != "en-us" && String.IsNullOrEmpty(downloadUrl) != true)
                 {
-                    var newCulture = new CultureInfo(cultureCode);
-                    Thread.CurrentThread.CurrentCulture = newCulture;
                     GetLanguagePack(downloadUrl, installFolder);
                     return true;
                 }
@@ -600,7 +597,10 @@ namespace DotNetNuke.Services.Upgrade.Internals
             if (!string.IsNullOrEmpty(config.File))
             {
                 builder["attachDbFilename"] = "|DataDirectory|" + config.File;
-                builder["user instance"] = true;
+                // LocalDB does not support User Instance attribute
+                // perhaps a better solution is to not force this from code and let it to the decision fo the person writing the connection string
+                if (string.IsNullOrEmpty(config.Server) || config.Server.IndexOf("(localdb)", StringComparison.OrdinalIgnoreCase) == -1)
+                    builder["user instance"] = true;
             }
             else
             {
